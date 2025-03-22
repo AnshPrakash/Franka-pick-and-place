@@ -78,7 +78,6 @@ class IKSolver:
         wall.setColor([0.5, 0.5, 0.5])
         
 
-        self.C.view(pause=True, message="Move the camera and press a key!")
         
         
 
@@ -98,9 +97,6 @@ class IKSolver:
         # Convert target position and orientation to ry coordinate system
         target_ori = [target_ori[3], target_ori[0], target_ori[1], target_ori[2]]
         
-        # print(target_pos, target_ori)
-        # print(self.sim.robot.pos, self.sim.robot.ori)
-
         # Create a new frame for the debugging target
         target_frame = self.C.addFrame('target_marker')
         target_frame.setShape(ry.ST.marker, [.4])  # Marker is visual only
@@ -183,13 +179,6 @@ class IKSolver:
             return None
         
         q = komo.getPath()
-        self.C.setJointState(q[0])
-        print("DEBUG | DEBUG")
-        for f in self.C.getFrames():
-            if f.name == "l_gripper" or f.name == "l_panda_base":
-                print(f.name, f.asDict()) 
-
-        self.C.view(True)
 
         return q[0]
 
