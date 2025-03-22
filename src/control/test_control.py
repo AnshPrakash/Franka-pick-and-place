@@ -47,8 +47,8 @@ def run_exp(config: Dict[str, Any]):
             q = inverse_kinematics.compute_target_configuration(target_pos, target_ori)
             print(f"New Joint Configuration: {q}")
             for i in range(10000):
-                # if q is not None:
-                    # sim.robot.position_control(q)
+                if q is not None:
+                    sim.robot.position_control(q)
                 sim.step()
                 if i > 1:
                     print("Base POSE ! ", p.getJointStates(sim.robot.id, sim.robot.arm_idx))
