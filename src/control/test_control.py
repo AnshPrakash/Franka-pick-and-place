@@ -43,12 +43,17 @@ def run_exp(config: Dict[str, Any]):
             target_pos, target_ori = p.getBasePositionAndOrientation(sim.object.id)
             print(f"Target Pos: {target_pos}")
             print(f"Target Ori: {target_ori}")
+            target_pos = np.array([-0.05018395, -0.46971428,  1.4 ])
             q = inverse_kinematics.compute_target_configuration(target_pos, target_ori)
             print(f"New Joint Configuration: {q}")
             for i in range(10000):
-                if q is not None:
-                    sim.robot.position_control(q)
+                # if q is not None:
+                    # sim.robot.position_control(q)
                 sim.step()
+                if i > 1:
+                    print("Base POSE ! ", p.getJointStates(sim.robot.id, sim.robot.arm_idx))
+                    print("CHECK joint limits ! ", sim.robot.get_joint_limits())
+                    print("EE POSE ! ", sim.robot.get_ee_pose())
                 # for getting renders
                 # rgb, depth, seg = sim.get_ee_renders()
                 # rgb, depth, seg = sim.get_static_renders()

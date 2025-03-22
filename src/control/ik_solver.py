@@ -14,9 +14,90 @@ class IKSolver:
 
         C = ry.Config()
         C.addFile(ry.raiPath('scenarios/pandaSingle.g'))
-        self.C = C
-    
 
+        self.C = C
+        
+        self._configure_ry()
+        # self.C.view()
+
+        self.C.view(pause=True, message="Move the camera and press a key!")
+        
+
+    def _configure_ry(self):
+        """
+            Align the ry configuration with the pybullet simulation
+        """
+        
+        table_pos, table_ori = p.getBasePositionAndOrientation(self.sim.table.id)
+
+        tray_pos, tray_ori = p.getBasePositionAndOrientation(self.sim.goal.id)
+
+        robot_pos, robot_ori = self.sim.robot.pos, self.sim.robot.ori
+        
+
+        # Convert PyBullet quaternion [x, y, z, w] → RAI quaternion [w, x, y, z]
+        table_ori = [table_ori[3], table_ori[0], table_ori[1], table_ori[2]]
+        tray_ori = [tray_ori[3], tray_ori[0], tray_ori[1], tray_ori[2]]
+        robot_ori = [robot_ori[3], robot_ori[0], robot_ori[1], robot_ori[2]]  
+
+
+        # Create the tray frame
+        # Get collision shape data (gives more accurate size)
+        tray_id = self.sim.goal.id
+        collision_data = p.getCollisionShapeData(tray_id, -1)
+        tray_size = collision_data[0][3]  # Extracting halfExtents (for box shapes)
+        tray = self.C.addFrame("tray")
+        tray.setShape(ry.ST.ssBox, [tray_size[0], tray_size[1], tray_size[2], 0.02])  # Full size, with corner radius
+        tray.setColor([0.5, 0.5, 0.5])  # Grey color
+        tray.setPosition(tray_pos)  
+        tray.setQuaternion(tray_ori)
+
+        # Create the table frame
+        table = self.C.getFrame("table")
+        table.setShape(ry.ST.ssBox, [1.5, 1.5, 0.05, 0.01])  # Full size, with corner radius
+        table.setColor([0.2])  # Grey color
+
+
+        table_pos = [table_pos[0], table_pos[1], self.sim.robot.tscale * 0.6] # 0.6 table height came from urdf file
+        self.C.getFrame("table").setPosition(table_pos)
+        self.C.getFrame("table").setQuaternion(table_ori)
+
+        # Adjust robot position
+        # Has to done after setting the table position because table is the parent of robot
+            
+        l_panda_base = self.C.getFrame("l_panda_base")
+        l_panda_base.setPosition(robot_pos)
+        l_panda_base.setQuaternion(robot_ori)
+
+        joint_states = self.sim.robot.get_joint_positions()
+        self.C.setJointState(joint_states)
+
+
+        # DEBUG
+        print("Expected Robot pos", robot_pos)
+        print("Expected tray pos", tray_pos)
+        print("Expected table pos", table_pos)
+
+        # Real Pos in ry.Config
+        print("Real Robot pos", l_panda_base.getPosition())
+        print("Real tray pos", tray.getPosition())
+        print("Real table pos", table.getPosition())
+        
+
+        
+
+        
+        # print(" Config adjusted ",self.C.getJointState())
+        
+        
+
+    def get_coordinate_for_ry(self, target_pos, target_ori):
+        """
+            Convert the target position and orientation to the ry coordinate system
+        """
+        target_pos = np.array(target_pos)
+        target_ori = np.array(target_ori)
+        return target_pos, target_ori
 
     def compute_target_configuration(self, target_pos, target_ori):
         """
@@ -27,10 +108,17 @@ class IKSolver:
         # Get current robot state
         joint_states = self.sim.robot.get_joint_positions()
 
+        
         # Update KOMO with new state
         # Will also update the robot's base and keep the real robot state
         self.C.setJointState(joint_states)
-
+        # DEBUG
+        # print("DEBUG | DEBUG")
+        # for f in self.C.getFrames():
+        #     print(f.name, f.asDict()) #info returns all attributes, similar to what is defined in the .g-files
+        #     #see also all the f.get... methods
+        
+        
 
         # # Get joint limits
         # j_lower, j_upper = self.sim.robot.get_joint_limits()
@@ -41,7 +129,6 @@ class IKSolver:
 
 
         qHome = self.C.getJointState()
-
 
         # Initialize KOMO solver
 
@@ -82,9 +169,16 @@ class IKSolver:
             print('-- Always check feasibility flag of NLP solver return')
         else:
             print('-- THIS IS INFEASIBLE!')
-            return None
-
-        q = komo.getPath()
+            # return None
         
+        q = komo.getPath()
+        self.C.setJointState(q[0])
+        print("DEBUG | DEBUG")
+        for f in self.C.getFrames():
+            if f.name == "l_gripper" or f.name == "l_panda_base":
+                print(f.name, f.asDict()) 
+
+        # self.C.view()
+
         return q[0]
 
