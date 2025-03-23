@@ -78,17 +78,6 @@ class IKSolver:
         wall.setColor([0.5, 0.5, 0.5])
         
 
-        
-        
-
-    def get_coordinate_for_ry(self, target_pos, target_ori):
-        """
-            Convert the target position and orientation to the ry coordinate system
-        """
-        target_pos = np.array(target_pos)
-        target_ori = np.array(target_ori)
-        return target_pos, target_ori
-
     def compute_target_configuration(self, target_pos, target_ori):
         """
            Compute the robot's joint configuration given the target end-effector

@@ -163,3 +163,5 @@ cython_debug/
 
 *pybullet-object-models
 z.log.global
+tutorials
+ry_configs
