@@ -11,3 +11,22 @@ This module estimates the 3D location, i.e., the 6D pose of an obstacle in the s
 
 
 
+# Dependencies
+
+```
+pip install filterpy
+```
+
+# State Transition Model
+
+```
+State Transition Model
+For a constant-velocity model, the discretized equations (using a time step dt) are:
+
+  xₖ₊₁ = xₖ + vx·dt
+  vxₖ₊₁ = vxₖ
+  yₖ₊₁ = yₖ + vy·dt
+  vyₖ₊₁ = vyₖ
+  zₖ₊₁ = zₖ + vz·dt
+  vzₖ₊₁ = vzₖ
+```
