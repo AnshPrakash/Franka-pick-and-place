@@ -10,3 +10,4 @@ dependencies:
       - matplotlib
       - pyyaml
       - open3d
+      - trimesh
