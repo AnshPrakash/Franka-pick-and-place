@@ -11,3 +11,4 @@ dependencies:
       - pyyaml
       - open3d
       - trimesh
+      - robotics
