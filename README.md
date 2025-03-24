@@ -14,6 +14,7 @@ conda env create --name irobman -f environment.yml
 conda activate irobman
 git clone https://github.com/eleramp/pybullet-object-models.git # inside the irobman_project folder
 pip install -e pybullet-object-models/
+sudo apt install liblapack3 freeglut3 libglew-dev
 ```
 
 Note that you should check after the installation if pybullet is using numpy or not by running `pybullet.isNumpyEnabled()` in your code. Everything can still run without this too but it will be slow. You can also increase the speed of execution by choosing not to see the camera output in the GUI by toggling `cam_render_flag`. You will be able to still see the GUI but the cam output there will not be visible.
