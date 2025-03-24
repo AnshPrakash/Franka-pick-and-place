@@ -89,9 +89,6 @@ class Track:
         if (measurement is None):
             measurement = self.prev_position
         
-        
-        x, y, z = measurement[0], measurement[1], measurement[2]
-
         kf_obstacle = self.kf_obstacle
 
         # In your simulation loop, suppose you obtain a rough measurement (x_meas, y_meas, z_meas):
