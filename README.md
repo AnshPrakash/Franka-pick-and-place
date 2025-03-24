@@ -10,10 +10,8 @@ Make sure you have [anaconda](https://www.anaconda.com/) or [miniconda](https://
 ```shell
 git clone https://github.com/iROSA-lab/irobman_project_wise2324.git
 cd irobman_project_wise2324
-conda create -n irobman python=3.8
+conda env create --name irobman -f environment.yml
 conda activate irobman
-conda install pybullet
-pip install matplotlib pyyaml
 git clone https://github.com/eleramp/pybullet-object-models.git # inside the irobman_project folder
 pip install -e pybullet-object-models/
 ```
