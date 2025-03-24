@@ -1,0 +1,13 @@
+name: irobman
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.8
+  - pybullet
+  - pip
+  - pip:
+      - matplotlib
+      - pyyaml
+      - open3d
+      - trimesh
