@@ -1,16 +1,12 @@
-from typing import Dict, Any, Optional
-
 import numpy as np
 import pybullet as p
 from filterpy.kalman import KalmanFilter
+
 import math
 import matplotlib.pyplot as plt
 
-
-from src.robot import Robot
-from src.objects import Obstacle, Table, Box, YCBObject, Goal
-from src.utils import pb_image_to_numpy
 from src.simulation import Simulation
+from src.perception import Perception
 
 class Track:
     """Track class for tracking objects given its object id in the scene."""
@@ -27,8 +23,23 @@ class Track:
         self.object_color = None
         self.position = None
         self.object_size = None # Radius of the sphere
+        self.perception = Perception()
         self.sensor = Measurement(obj_id, sim)
         # Get initial estimate of the object position
+        
+        measurement = self.perception.get_pcds( [self.obj_id],
+                                                self.sim, 
+                                                use_ee = False)
+        
+        # measurement = self.sensor.measure()
+        real_obstacle_world_pos, _ =  p.getBasePositionAndOrientation(self.obj_id)
+        print("MEASURE\n")
+        points = np.asarray(measurement[self.obj_id].points)
+        print(points.shape)
+        print("Mean of point cloud", np.median(points, axis=0))
+        print("Actual object pos", real_obstacle_world_pos  )
+        exit()
+
         measurement = self.sensor.measure()
         x,y,z = 0,0,0
         if measurement is not None:
@@ -48,7 +59,9 @@ class Track:
         # segmentation mask to extract the object
         # Single view of the object
 
-        measurement = self.sensor.measure()
+        measurement = self.sensor.measure()        
+        return measurement
+
         x, y, z = measurement[0], measurement[1], measurement[2]
 
         kf_obstacle = self.kf_obstacle
@@ -146,11 +159,19 @@ class Measurement:
         # Extract 3D points corresponding to the target object using the segmentation mask
         object_points = []
         height_img, width_img = depth_real.shape
+        mean_u ,mean_v = 0.0 ,0.0
+        total = 0
         for v in range(height_img):
             for u in range(width_img):
                 if seg[v, u] == self.obj_id:
+                    total +=1
+                    mean_u += u
+                    mean_v += v 
                     point = self.pixel_to_camera_coords(u, v, depth_real, K)
                     object_points.append(point)
+
+        mean_u = mean_u/total
+        mean_v = mean_v/total
 
         object_points = np.array(object_points)
         if len(object_points) == 0:
@@ -159,14 +180,88 @@ class Measurement:
 
         # Estimate the object's position by computing the centroid of its 3D points
         object_center = np.mean(object_points, axis=0)
-        print("Estimated 3D Object Position in Camera Coordinates:", object_center)
+
+        # for Debuging
+        print("\n\n======== DEBUG==========")
+        view_mat = np.array(self.sim.stat_viewMat).reshape(4, 4)
+        proj_mat = np.array(self.sim.projection_matrix).reshape(4, 4).T
+
+        real_obstacle_world_pos, _ =  p.getBasePositionAndOrientation(self.obj_id)
+        real_obstacle_pos = np.append(real_obstacle_world_pos,1)
+        real_camera_cord = view_mat.dot(real_obstacle_pos)
+        
+
+        (u,v), image_cord = self.camera_to_image_coords(
+                                               real_camera_cord[:3],
+                                               proj_mat,
+                                               self.sim.width,
+                                               self.sim.height )
+        K = self.compute_intrinsics_from_projection()
+        print("Error ", (u, v))
+        check_obstacle_camera_pos = self.pixel_to_camera_coords(u, v, depth_real, K)
+
+        check_obstacle_word_pos = self.camera_to_world( real_camera_cord[:3], self.sim.stat_viewMat)
+
+        
+        # print("NDC coordinates:", image_cord[:3])
+        # print("\n\n")
+        print("Intrinsic from fov", self.compute_intrinsics(self.sim.width,
+                                    self.sim.height,
+                                    self.fov), "\n")
+        print("Intrinsic from proj", self.compute_intrinsics_from_projection(),"\n")
+
+        print("Pixel coordinates (u, v):", (u, v), "\n")
+
+        # print("Avg. Segmented (mean_u, mean_v)", (mean_u, mean_v))
+        print("Actual Camera co-ordinate", real_camera_cord)
+        print("Re-map to camera co-ordinate system", check_obstacle_camera_pos , "\n")
+        
+
+        # this is correct
+        print("World  pos from p", real_obstacle_world_pos)
+        print("Map to Camera pos", check_obstacle_word_pos)
+        exit()
+        object_center = self.camera_to_world( object_center, self.sim.stat_viewMat)
+        # print("Estimated 3D Object Position in Camera Coordinates:", object_center)
+
 
         return object_center
 
+    def camera_to_image_coords(self, camera_point, projection_matrix, width, height):
+        """
+        Converts a 3D point from the camera coordinate frame to pixel coordinates in the image.
+
+        Parameters:
+        - camera_point: np.array (3,) or (4,) -> The 3D point in camera coordinates.
+        - projection_matrix: np.array (4,4)  -> The 4x4 projection matrix.
+        - width: int  -> Image width in pixels.
+        - height: int -> Image height in pixels.
+
+        Returns:
+        - (u, v): tuple (int, int) -> The pixel coordinates in the image.
+        - ndc_coords: np.array (3,) -> The normalized device coordinates (NDC).
+        """
+
+        # Convert to homogeneous coordinates if needed (ensure it's a 4D vector)
+        if len(camera_point) == 3:
+            camera_point = np.append(camera_point, 1)
+
+        # Transform to clip space
+        clip_coords = projection_matrix @ camera_point  # P * X_camera
+
+        # Perform homogeneous division to get NDC coordinates
+        ndc_coords = clip_coords[:3] / clip_coords[-1]  # (x_ndc, y_ndc, z_ndc)
+
+        # Convert NDC to pixel coordinates
+        u = int((width / 2) * (ndc_coords[0] + 1))   # Scale & shift x
+        v = int((height / 2) * (1 - ndc_coords[1]))  # Scale & invert y
+
+        return (u, v), ndc_coords
 
     def depth_to_real(self, depth_map, near = 0.01, far = 5.0):
         """
         Convert PyBullet normalized depth map to real-world depth (meters).
+        https://stackoverflow.com/questions/6652253/getting-the-true-z-value-from-the-depth-buffer
 
         Args:
             depth_map (numpy array): Normalized depth map with values in range [0, 1].
@@ -178,8 +273,35 @@ class Measurement:
         """
         # Conversion formula:
         # depth_real = 2 * far * near / (far + near - depth_norm*(far - near))
-        depth_real = (2.0 * far * near) / (far + near - depth_map * (far - near))
+        # depth = 2*depth_map - 1
+        depth = depth_map
+        # depth_real = 2*(far * near) / (far + near - depth * (far - near))
+        depth_real = (far * near) / (far  - depth * (far - near))
         return depth_real
+    
+    def compute_intrinsics_from_projection(self):
+        """
+        Compute the camera intrinsic matrix (K) from the projection matrix.
+
+        Returns:
+            np.array: 3x3 intrinsic camera matrix.
+        """
+        proj_matrix = np.array(self.sim.projection_matrix).reshape(4, 4) # Transpose for correct shape
+
+        width = self.sim.width
+        height = self.sim.height
+
+        fx = proj_matrix[0, 0] * width / 2.0  # Focal length in x
+        fy = proj_matrix[1, 1] * height / 2.0  # Focal length in y
+        cx = (1 - proj_matrix[0, 2]) * width / 2.0  # Principal point x
+        cy = (1 + proj_matrix[1, 2]) * height / 2.0  # Principal point y
+        print(proj_matrix)
+        K = np.array([
+            [fx,  0,  cx],
+            [0,  fy,  cy],
+            [0,   0,   1]
+        ])
+        return K
     
     def compute_intrinsics(self, width, height, fov):
         """
@@ -221,17 +343,34 @@ class Measurement:
         """
         fx, fy = K[0, 0], K[1, 1]
         cx, cy = K[0, 2], K[1, 2]
-        u, v = int(round(u)), int(round(v))
-        Z = depth_map[v, u]  # real-world depth at pixel (u,v)
+        # u, v = int(round(u)), int(round(v))
+        Z = depth_map[u, v]  # real-world depth at pixel (u,v)
         X = (u - cx) * Z / fx
         Y = (v - cy) * Z / fy
         return np.array([X, Y, Z])
     
+    def camera_to_world(self, P_camera, view_matrix):
+        """
+        Transform a point from camera coordinates to world coordinates.
+        
+        Args:
+            P_camera (numpy array): 3D point [X, Y, Z] in camera coordinates.
+            view_matrix (list or array): The view matrix as provided by PyBullet.
+            
+        Returns:
+            numpy array: 3D point in world coordinates.
+        """
+        # Reshape view_matrix into a 4x4 matrix.
+        view_mat = np.array(view_matrix).reshape(4, 4)
+        # Invert the view matrix to get the extrinsic transformation (camera-to-world)
+        extrinsics = np.linalg.inv(view_mat)
+        # Convert the camera point to homogeneous coordinates by appending 1.
+        P_homog = np.append(P_camera, 1)
+        P_world_homog = extrinsics.dot(P_homog)
+        return P_world_homog[:3]
+
     
     def visualize_segmentation(self, rgb, seg, target_obj_id):
-        import matplotlib.pyplot as plt
-        import numpy as np
-
         """
         Visualizes the segmentation of an object in the scene.
 
@@ -264,6 +403,3 @@ class Measurement:
         ax[1].axis("off")
 
         plt.show()
-
-    # Example Usage (assuming you have rgb and seg from get_static_renders)
-    # visualize_segmentation(rgb, seg, target_obj_id)
