@@ -30,3 +30,10 @@ For a constant-velocity model, the discretized equations (using a time step dt) 
   zₖ₊₁ = zₖ + vz·dt
   vzₖ₊₁ = vzₖ
 ```
+
+# Least Squares to Estimate the Center of obstacles
+
+```
+Use point clouds and formulate a Least Squares Estimation problem
+
+```
