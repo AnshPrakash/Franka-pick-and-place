@@ -1,7 +1,5 @@
 import os
 import glob
-
-import pybullet
 import yaml
 
 import numpy as np
@@ -11,9 +9,10 @@ from typing import Dict, Any
 from pybullet_object_models import ycb_objects  # type:ignore
 
 from src.simulation import Simulation
-from src.perception import Perception
+
+import pybullet as p
 from src.control import IKSolver
-from src.utils import visualize_point_cloud, get_robot_view_matrix, get_pcd_from_numpy
+from scipy.spatial.transform import Rotation as R
 
 
 def run_exp(config: Dict[str, Any]):
@@ -24,22 +23,9 @@ def run_exp(config: Dict[str, Any]):
     files = glob.glob(os.path.join(object_root_path, "Ycb*"))
     obj_names = [file.split('/')[-1] for file in files]
     sim = Simulation(config)
-    # PERCEPTION: initialize Perception class and load all necessary label meshes/pointclouds (atfer env has been reset the first time)
-    perception = Perception()
-    obstacle_init = True
-
     for obj_name in obj_names:
-        # PERCEPTION
-        target_init = True
         for tstep in range(10):
             sim.reset(obj_name)
-            # PERCEPTION: only init obstacles once and target after object switch
-            if obstacle_init:
-                perception.set_objects([obst.id for obst in sim.obstacles])
-                obstacle_init = False
-            if target_init:
-                perception.set_objects(sim.object.id)
-                target_init = False
             print((f"Object: {obj_name}, Timestep: {tstep},"
                    f" pose: {sim.get_ground_tuth_position_object}"))
             pos, ori = sim.robot.pos, sim.robot.ori
@@ -54,37 +40,36 @@ def run_exp(config: Dict[str, Any]):
             ee_pos, ee_ori = sim.robot.get_ee_pose()
             print(f"Robot End Effector Position: {ee_pos}")
             print(f"Robot End Effector Orientation: {ee_ori}")
-
             inverse_kinematics = IKSolver(sim)
-            perception.set_ik_solver(inverse_kinematics)
-            # PERCEPTION: get pointcloud for target object once before
 
-            # ToDo: Check if initial skipping (due to falling object) is necessary
-            for i in range(50):
-                sim.step()
-
-            target_object_pcd = perception.get_pcd(sim.object.id, sim, use_static=False, use_ee=True)
-            target_object_pos, failure = perception.perceive(sim.object.id, target_object_pcd, visualize=True)
-
+            target_pos, target_ori = p.getBasePositionAndOrientation(sim.object.id)
+            print(f"Target Pos: {target_pos}")
+            print(f"Target Ori: {target_ori}")
+            target_pos = np.array([-0.05018395, -0.46971428, 1.4])
+            target_pos = np.array([0, -0.65, 1.8])
+            target_ori = R.from_euler('xyz', [np.pi, 0, 0]).as_quat()
+            q = inverse_kinematics.compute_target_configuration(target_pos, target_ori)
+            #q = p.calculateInverseKinematics(sim.robot.id, sim.robot.ee_idx, target_pos, target_ori)[:-2]
+            print(f"New Joint Configuration: {q}")
             for i in range(10000):
+                if q is not None:
+                    sim.robot.position_control(q)
                 sim.step()
+                if i > 1:
+                    print("Base POSE ! ", p.getJointStates(sim.robot.id, sim.robot.arm_idx))
+                    print("CHECK joint limits ! ", sim.robot.get_joint_limits())
+                    print("EE POSE ! ", sim.robot.get_ee_pose())
+                    print(f"Target Orientation: {target_ori}")
+                    print(R.from_quat(sim.robot.get_ee_pose()[1]).as_euler('xyz', degrees=True))
                 # for getting renders
-                #rgb, depth, seg = sim.get_ee_renders()
-                #rgb, depth, seg = sim.get_static_renders()
-                # PERCEPTION
-                # obstacle_pcds = {obst.id: perception.get_pcd(obst.id, sim, use_ee=False) for obst in sim.obstacles}
-                # obstacles_pos = np.array(
-                #     [perception.perceive(obj_id, obj_pcd, visualize=False)[0] for (obj_id, obj_pcd) in obstacle_pcds.items()])
-                # for obst in sim.obstacles:
-                #     visualize_point_cloud(np.asarray(perception.object_pcds[obst.id].points))
-                visualize_point_cloud(np.asarray(target_object_pcd.points))
-
+                # rgb, depth, seg = sim.get_ee_renders()
+                # rgb, depth, seg = sim.get_static_renders()
                 obs_position_guess = np.zeros((2, 3))
                 print((f"[{i}] Obstacle Position-Diff: "
                        f"{sim.check_obstacle_position(obs_position_guess)}"))
                 goal_guess = np.zeros((7,))
                 print((f"[{i}] Goal Obj Pos-Diff: "
-                       f"{sim.check_goal_obj_pos(target_object_pos)}"))
+                       f"{sim.check_goal_obj_pos(goal_guess)}"))
                 print(f"[{i}] Goal Satisfied: {sim.check_goal()}")
     sim.close()
 

@@ -5,21 +5,36 @@ import numpy as np
 import open3d as o3d
 from scipy.spatial.transform import Rotation as R
 import trimesh
+
 from src.utils import get_pcd_from_numpy, get_robot_view_matrix
 
 import pybullet as p
 
 class Perception:
-    def __init__(self):
+    def __init__(self, voxel_size=0.005, retries=20, initial_translation=True):
         self.object_meshs = {}
         self.object_pcds = {}
         # 0.05 in reference, but different scale
         # 0.005 won't filter much, but already not many points
-        self.voxel_size = 0.005
+        self.voxel_size = voxel_size
         # if prior to registration already translate pointclouds to be roughly alined
-        self.initial_translation = True
+        self.initial_translation = initial_translation
         # number of retries for registration in case exception happens or bad registration (no inliers)
-        self.retries = 20
+        self.retries = retries
+
+        self.object_views = {
+            'top': {'pos': (0, -0.65, 1.9), 'ori': (np.pi, 0, 0)},
+            'right': {'pos': (0, -0.3, 1.9), 'ori': (7/8 * np.pi, 0, 0)}, # initially 3/4 * np.pi
+            'left': {'pos': (0, -0.9, 1.9), 'ori': (9/8 * np.pi, 0, 0)}, # initially 5/4 * np.pi
+            'front': {'pos': (0.3, -0.65, 1.9), 'ori': (3/4 * np.pi, 0, -np.pi / 2)}, # (0, -3/4 * np.pi, 0)
+            'back': {'pos': (-0.3, -0.65, 1.9), 'ori': (3 / 4 * np.pi, 0, np.pi / 2)}  # (0, 3/4 * np.pi, 0)
+
+        }
+
+        self.ik_solver = None
+
+    def set_ik_solver(self, ik_solver):
+        self.ik_solver = ik_solver
 
     def set_objects(self, object_ids, nb_points=10000):
         if not isinstance(object_ids, list):
@@ -77,7 +92,10 @@ class Perception:
             visualize: Whether to visualize pointclouds prior and after registration with open3d
             """
         # first step: get the source pcd of the object
-        pcd_source = copy.deepcopy(self.object_pcds[obj_id])
+        if not isinstance(obj_id, o3d.geometry.PointCloud):
+            pcd_source = copy.deepcopy(self.object_pcds[obj_id])
+        else:
+            pcd_source = copy.deepcopy(obj_id)
         # translate source pcd to target pcd for more robust registration
         if self.initial_translation:
             initial_trans = pcd_target.get_center() - pcd_source.get_center()
@@ -108,7 +126,7 @@ class Perception:
             # third step: (fast) global registration using RANSAC
             try:
                 result_global = self.global_registration(source_down, target_down, source_fpfh, target_fpfh)
-                result_final = self.local_registration(pcd_source, pcd_target, result_global)
+                result_final = self.local_registration(pcd_source, pcd_target, result_global.transformation)
             except:
                 print(f"Registration failed due to exception...")
                 failure = True
@@ -143,9 +161,9 @@ class Perception:
             # convert rotation matrix to quaternion
             r = R.from_matrix(ori)
             quat = r.as_quat()
-            return np.hstack([pos, quat])
+            return np.hstack([pos, quat]), failure
         else:
-            return trans_matrix
+            return trans_matrix, failure
 
     def draw_registration_result(self, source, target, transformation):
         import copy
@@ -167,15 +185,113 @@ class Perception:
                 maximum_correspondence_distance=distance_threshold))
         return result
 
-    def local_registration(self, source_pcd, target_pcd, result_global):
+    def local_registration(self, source_pcd, target_pcd, global_transformation):
         """Local registration using ICP (based on open3d reference)"""
         # voxel_size * 0.4 in reference => way too small
         # 0.04 also not too bad
         distance_threshold = 0.02
         result = o3d.pipelines.registration.registration_icp(
-            source_pcd, target_pcd, distance_threshold, result_global.transformation,
+            source_pcd, target_pcd, distance_threshold, global_transformation,
             o3d.pipelines.registration.TransformationEstimationPointToPlane())
         return result
+
+
+    def get_pcd(self, object_id, sim, use_static=True, use_ee=False):
+        """Extract pointclouds for the given object based on both camera views."""
+        # point cloud collection for later stacking
+        pcd_collections = []
+        # first static
+        if use_static:
+            rgb, depth, seg = sim.get_static_renders()
+            static_pcd = Perception.pcd_from_img(
+                sim.width,
+                sim.height,
+                depth,
+                sim.stat_viewMat,
+                sim.projection_matrix,
+                seg == object_id,
+                output_pcd_object=False
+            )
+            pcd_collections.append(static_pcd)
+        # then endeffector
+        if use_ee:
+            # pos_threshold = 0.19
+            # ori_threshold = 0.19
+            ee_pcds = []
+            change_threshold = 0.004
+            stored_trans = self.initial_translation
+            self.initial_translation = False
+            for view, view_params in self.object_views.items():
+                target_pos = view_params['pos']
+                target_ori = R.from_euler('xyz', view_params['ori']).as_quat()
+
+                # move robot ee to desired positions
+                # ToDo: change with own IK solver!
+                #q = self.ik_solver.compute_target_configuration(target_pos, target_ori)
+                q = p.calculateInverseKinematics(sim.robot.id, sim.robot.ee_idx, target_pos, target_ori)[:-2]
+                # if solution is not found /infeasible just skip
+                if q is None:
+                    print("View skipped due to infeasible IK solution...")
+                    continue
+                sim.robot.position_control(q)
+                sim.step()
+                last_pos, last_ori = target_pos, target_ori
+                curr_pos, curr_ori = sim.robot.get_ee_pose()
+                # adjust ee until position and orientation change below some threshold
+                while (np.linalg.norm(curr_pos - last_pos) > change_threshold or
+                       np.linalg.norm(curr_ori - last_ori) > change_threshold):
+                    sim.robot.position_control(q)
+                    sim.step()
+                    last_pos, last_ori = curr_pos, curr_ori
+                    curr_pos, curr_ori = sim.robot.get_ee_pose()
+                    # print(f"View {view}, Pos change:", np.linalg.norm(curr_pos - last_pos))
+                    # print(f"View {view}, Ori change:", np.linalg.norm(curr_ori - last_ori))
+                print(f"View {view}, Final Pos error:", np.linalg.norm(sim.robot.get_ee_pose()[0] - target_pos))
+                print(f"View {view}, Final Ori error", np.linalg.norm(sim.robot.get_ee_pose()[1] - target_ori))
+
+                # get the new depth image and add pointcloud
+                rgb, depth, seg = sim.get_ee_renders()
+                pos, ori = sim.robot.get_ee_pose()
+                ee_pcd = Perception.pcd_from_img(
+                    sim.width,
+                    sim.height,
+                    depth,
+                    get_robot_view_matrix(pos, ori),
+                    sim.projection_matrix,
+                    seg == object_id,
+                    output_pcd_object=False
+                )
+                ee_pcd_object = get_pcd_from_numpy(ee_pcd)
+                ee_pcd_object.estimate_normals()
+                ee_pcds.append((len(ee_pcd_object.points), ee_pcd_object))
+
+            # align pointclouds
+            ee_pcds.sort(key=lambda x: x[0], reverse=True)
+            reference_pcd = ee_pcds[0][1] # point cloud with most points is reference
+            for nb_points, pcd in ee_pcds[1:]:
+                if nb_points > 0:
+                    # current pcd is source as we want to transform it to the reference
+                    #trans = self.local_registration(ee_pcd_object, reference_pcd, np.eye(4)).transformation
+                    trans, failure = self.perceive(pcd, reference_pcd, flatten=False, visualize=False)
+                    if failure:
+                        continue
+                    # self.draw_registration_result(ee_pcd_object, reference_pcd, np.eye(4))
+                    self.draw_registration_result(pcd, reference_pcd, trans)
+                    pcd.transform(trans)
+
+                pcd_collections.append(pcd.points)
+
+            self.initial_translation = stored_trans
+
+        # merge pointclouds
+        if pcd_collections:
+            combined_array = np.vstack(pcd_collections)
+        else:
+            # empty array for no points
+            combined_array = np.empty((0, 3))
+        final_pcd = get_pcd_from_numpy(combined_array)
+        return final_pcd
+
 
     @staticmethod
     def pcd_from_img(width, height, depth_vals, view_matrix, proj_matrix, seg_mask=None, output_pcd_object=True):
@@ -237,29 +353,19 @@ class Perception:
             return points
 
     @staticmethod
-    def get_pcds(object_ids, sim, use_ee=True):
-        """Extract pointclouds for the given objects based on both camera views."""
-        if not isinstance(object_ids, list):
-            object_ids = [object_ids]
-        # first static
-        rgb, depth, seg = sim.get_static_renders()
-        static_obstacle_pcds = {
-            id: Perception.pcd_from_img(sim.width, sim.height, depth, sim.stat_viewMat, sim.projection_matrix,
-                                        seg == id, output_pcd_object=False) for id in object_ids}
-        # then endeffector
-        if use_ee:
-            # ToDo: Logic to scan the room and combine pointclouds?
-            rgb, depth, seg = sim.get_ee_renders()
-            pos, ori = sim.robot.get_ee_pose()
-            ee_pcds = {
-                id: Perception.pcd_from_img(sim.width, sim.height, depth, get_robot_view_matrix(pos, ori),
-                                            sim.projection_matrix,
-                                            seg == id, output_pcd_object=False) for id in object_ids}
-        # merge pointclouds
-        if use_ee:
-            combined_dict = {key: get_pcd_from_numpy(np.vstack([static_obstacle_pcds[key], ee_pcds[key]])) for key in
-                             object_ids}
-        else:
-            combined_dict = {key: get_pcd_from_numpy(static_obstacle_pcds[key]) for key in object_ids}
+    def get_intrinsics(fov, aspect, width, height):
+        fx = width / (2 * aspect * np.tan(np.radians(fov / 2)))
+        fy = height / (2 * np.tan(np.radians(fov / 2)))
+        cx = width / 2
+        cy = height / 2
+        return fx, fy, cx, cy
 
-        return combined_dict
+    @staticmethod
+    def get_extrinsics(view_matrix):
+        Tc = np.array([[1, 0, 0, 0],
+                       [0, -1, 0, 0],
+                       [0, 0, -1, 0],
+                       [0, 0, 0, 1]]).reshape(4, 4)
+        T = np.linalg.inv(view_matrix) @ Tc
+
+        return T
