@@ -25,7 +25,7 @@ def run_exp(config: Dict[str, Any]):
     obj_names = [file.split('/')[-1] for file in files]
     sim = Simulation(config)
     # PERCEPTION: initialize Perception class and load all necessary label meshes/pointclouds (atfer env has been reset the first time)
-    perception = Perception()
+    perception = Perception(camera_stats=config['world_settings']['camera'])
     obstacle_init = True
 
     for obj_name in obj_names:
@@ -60,11 +60,12 @@ def run_exp(config: Dict[str, Any]):
             # PERCEPTION: get pointcloud for target object once before
 
             # ToDo: Check if initial skipping (due to falling object) is necessary
-            for i in range(50):
+            for i in range(50): # 50
                 sim.step()
 
-            target_object_pcd = perception.get_pcd(sim.object.id, sim, use_static=False, use_ee=True)
+            target_object_pcd = perception.get_pcd(sim.object.id, sim, use_static=False, use_ee=True, use_tsdf=False)
             target_object_pos, failure = perception.perceive(sim.object.id, target_object_pcd, visualize=True)
+            break
 
             for i in range(10000):
                 sim.step()

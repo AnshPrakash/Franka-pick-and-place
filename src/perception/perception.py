@@ -11,7 +11,8 @@ from src.utils import get_pcd_from_numpy, get_robot_view_matrix
 import pybullet as p
 
 class Perception:
-    def __init__(self, voxel_size=0.005, retries=20, initial_translation=True):
+    def __init__(self, voxel_size=0.005, retries=42, initial_translation=True,
+                 camera_stats=None): # extra parameters for TSDF method
         self.object_meshs = {}
         self.object_pcds = {}
         # 0.05 in reference, but different scale
@@ -32,6 +33,8 @@ class Perception:
         }
 
         self.ik_solver = None
+
+        self.camera_stats = camera_stats
 
     def set_ik_solver(self, ik_solver):
         self.ik_solver = ik_solver
@@ -132,7 +135,7 @@ class Perception:
                 failure = True
                 continue
             if result_final.fitness == 0:
-                print(f"Registration failed due to no inliers...")
+                # print(f"Registration failed due to no inliers...")
                 failure = True
                 continue
             else:
@@ -140,8 +143,17 @@ class Perception:
                 print(result_final)
                 failure = False
                 break
-
+        # try 1 time with point to point
         if failure:
+            for i in range(5): # also 5 tries to be safe, but usually only 1 try needed
+                result_global = self.global_registration(source_down, target_down, source_fpfh, target_fpfh)
+                result_final = self.local_registration(pcd_source, pcd_target, result_global.transformation, point_to_plane=False)
+                if result_final.fitness != 0:
+                    print(f"Registration successful with PointToPoint...")
+                    failure = False
+                    break
+        if failure:
+            print(f"Registration failed after {retries} retries...")
             trans_matrix = fallback
         else:
             trans_matrix = result_final.transformation.copy()
@@ -185,18 +197,24 @@ class Perception:
                 maximum_correspondence_distance=distance_threshold))
         return result
 
-    def local_registration(self, source_pcd, target_pcd, global_transformation):
+    def local_registration(self, source_pcd, target_pcd, global_transformation, point_to_plane=True):
         """Local registration using ICP (based on open3d reference)"""
         # voxel_size * 0.4 in reference => way too small
         # 0.04 also not too bad
         distance_threshold = 0.02
-        result = o3d.pipelines.registration.registration_icp(
-            source_pcd, target_pcd, distance_threshold, global_transformation,
-            o3d.pipelines.registration.TransformationEstimationPointToPlane())
+        # Note: originally used PointToPlane ICP, but PointToPoint seems to work better
+        if point_to_plane:
+            result = o3d.pipelines.registration.registration_icp(
+                source_pcd, target_pcd, distance_threshold, global_transformation,
+                o3d.pipelines.registration.TransformationEstimationPointToPlane())
+        else:
+            result = o3d.pipelines.registration.registration_icp(
+                source_pcd, target_pcd, distance_threshold, global_transformation,
+                o3d.pipelines.registration.TransformationEstimationPointToPoint())
         return result
 
 
-    def get_pcd(self, object_id, sim, use_static=True, use_ee=False):
+    def get_pcd(self, object_id, sim, use_static=True, use_ee=False, use_tsdf=False):
         """Extract pointclouds for the given object based on both camera views."""
         # point cloud collection for later stacking
         pcd_collections = []
@@ -217,8 +235,10 @@ class Perception:
         if use_ee:
             # pos_threshold = 0.19
             # ori_threshold = 0.19
-            ee_pcds = []
-            change_threshold = 0.004
+            scene_data = []
+            # NOTE!!!: for a lower threshold (0.004) the sim.step() function is called very often and causes the simulation
+            # in the next object iteration to crash due to lost physics server connection (just limiting steps to 25 also did work)
+            change_threshold = 0.01
             stored_trans = self.initial_translation
             self.initial_translation = False
             for view, view_params in self.object_views.items():
@@ -252,34 +272,44 @@ class Perception:
                 # get the new depth image and add pointcloud
                 rgb, depth, seg = sim.get_ee_renders()
                 pos, ori = sim.robot.get_ee_pose()
-                ee_pcd = Perception.pcd_from_img(
-                    sim.width,
-                    sim.height,
-                    depth,
-                    get_robot_view_matrix(pos, ori),
-                    sim.projection_matrix,
-                    seg == object_id,
-                    output_pcd_object=False
-                )
-                ee_pcd_object = get_pcd_from_numpy(ee_pcd)
-                ee_pcd_object.estimate_normals()
-                ee_pcds.append((len(ee_pcd_object.points), ee_pcd_object))
 
-            # align pointclouds
-            ee_pcds.sort(key=lambda x: x[0], reverse=True)
-            reference_pcd = ee_pcds[0][1] # point cloud with most points is reference
-            for nb_points, pcd in ee_pcds[1:]:
-                if nb_points > 0:
-                    # current pcd is source as we want to transform it to the reference
-                    #trans = self.local_registration(ee_pcd_object, reference_pcd, np.eye(4)).transformation
-                    trans, failure = self.perceive(pcd, reference_pcd, flatten=False, visualize=False)
-                    if failure:
-                        continue
-                    # self.draw_registration_result(ee_pcd_object, reference_pcd, np.eye(4))
-                    self.draw_registration_result(pcd, reference_pcd, trans)
-                    pcd.transform(trans)
+                # append current scene information
+                scene_data.append({'color': rgb, 'depth': depth, 'view_matrix': get_robot_view_matrix(pos, ori), 'seg': seg})
 
-                pcd_collections.append(pcd.points)
+            # compute pointclouds from scene data
+            if use_tsdf:
+                ee_pcd = self.integrate_tsdf(scene_data, sim.width, sim.height,
+                                             self.camera_stats['near'], self.camera_stats['far'], self.camera_stats['fov'])
+                pcd_collections.append(ee_pcd.points)
+            else:
+                ee_pcds = []
+                for data in scene_data:
+                    ee_pcd = Perception.pcd_from_img(
+                        sim.width,
+                        sim.height,
+                        data['depth'],
+                        data['view_matrix'],
+                        sim.projection_matrix,
+                        data['seg'] == object_id,
+                        output_pcd_object=False
+                    )
+                    ee_pcd_object = get_pcd_from_numpy(ee_pcd)
+                    ee_pcd_object.estimate_normals()
+                    ee_pcds.append((len(ee_pcd_object.points), ee_pcd_object))
+                # align pointclouds
+                ee_pcds.sort(key=lambda x: x[0], reverse=True)
+                reference_pcd = ee_pcds[0][1] # point cloud with most points is reference
+                pcd_collections.append(reference_pcd.points)
+                for nb_points, pcd in ee_pcds[1:]:
+                    if nb_points > 0:
+                        # current pcd is source as we want to transform it to the reference
+                        #trans = self.local_registration(ee_pcd_object, reference_pcd, np.eye(4)).transformation
+                        trans, failure = self.perceive(pcd, reference_pcd, flatten=False, visualize=False)
+                        if failure:
+                            continue
+                        pcd.transform(trans)
+
+                    pcd_collections.append(pcd.points)
 
             self.initial_translation = stored_trans
 
@@ -352,20 +382,107 @@ class Perception:
         else:
             return points
 
+
+    """Functions (adjusted from ChatGPT) for using TSDF integration for Pointcloud extraction"""
+
+    def integrate_tsdf(self, render_data_list, width, height, near, far,
+                                     fov, sdf_trunc=0.04):
+        """
+        Integrate multiple RGB-D frames from PyBullet into a TSDF volume and extract a unified point cloud.
+
+        Parameters:
+          - render_data_list: list of dicts, each with keys:
+              'color':       np.array (H, W, 3), dtype=np.uint8
+              'depth':       np.array (H, W), depth values in meters
+              'view_matrix': list of 16 floats (PyBullet view matrix)
+          - width, height: image dimensions
+          - near, far: near and far clipping distances
+          - fov: vertical field-of-view (in degrees) of the camera (constant across frames)
+          - voxel_length, sdf_trunc: TSDF parameters
+
+        Returns:
+          An Open3D point cloud from the integrated TSDF volume.
+        """
+        # Precompute intrinsic parameters once.
+        fx, fy, cx, cy = self.get_intrinsics(fov, width, height)
+        intrinsic = o3d.camera.PinholeCameraIntrinsic(width, height, fx, fy, cx, cy)
+
+        volume = o3d.pipelines.integration.ScalableTSDFVolume(
+            voxel_length=self.voxel_size,
+            sdf_trunc=sdf_trunc,
+            color_type=o3d.pipelines.integration.TSDFVolumeColorType.RGB8
+        )
+
+        for idx, data in enumerate(render_data_list):
+            color_np = np.ascontiguousarray(data['color'][:, :, :3])
+            depth_ndc = data['depth']
+            depth_linear = np.ascontiguousarray(far * near / (far - (far - near) * depth_ndc))
+            view_matrix = data['view_matrix']
+            # Compute extrinsics from the view matrix.
+            extrinsics = self.get_extrinsics(view_matrix)
+
+            # Convert numpy arrays to Open3D images.
+            color_o3d = o3d.geometry.Image(color_np)
+            depth_o3d = o3d.geometry.Image(depth_linear.astype(np.float32))
+
+            rgbd = o3d.geometry.RGBDImage.create_from_color_and_depth(
+                color_o3d, depth_o3d,
+                depth_scale=1.0,  # depth in meters
+                depth_trunc=far,
+                convert_rgb_to_intensity=False
+            )
+            print(f"Integrating frame {idx}")
+            volume.integrate(rgbd, intrinsic, extrinsics)
+
+        pcd = volume.extract_point_cloud()
+        return pcd
+
     @staticmethod
-    def get_intrinsics(fov, aspect, width, height):
-        fx = width / (2 * aspect * np.tan(np.radians(fov / 2)))
-        fy = height / (2 * np.tan(np.radians(fov / 2)))
-        cx = width / 2
-        cy = height / 2
+    def get_intrinsics(fov, width, height):
+        """
+        Compute camera intrinsics given the vertical FOV (in degrees), aspect ratio,
+        and image dimensions. According to standard pinhole camera model:
+
+          f_y = (height/2) / tan(fov/2)
+          f_x = f_y * aspect   (since aspect = width/height)
+          c_x = width/2, c_y = height/2
+
+        References:
+          - Songho’s OpenGL Projection Matrix page:
+            http://www.songho.ca/opengl/gl_projectionmatrix.html
+        """
+        # Convert fov to radians
+        fov_rad = np.radians(fov)
+        fy = (height / 2) / np.tan(fov_rad / 2)
+        fx = fy * (width / height)  # := aspect
+        cx = width / 2.0
+        cy = height / 2.0
         return fx, fy, cx, cy
 
     @staticmethod
     def get_extrinsics(view_matrix):
-        Tc = np.array([[1, 0, 0, 0],
-                       [0, -1, 0, 0],
-                       [0, 0, -1, 0],
-                       [0, 0, 0, 1]]).reshape(4, 4)
-        T = np.linalg.inv(view_matrix) @ Tc
+        """
+        Compute the extrinsic matrix from a PyBullet view matrix.
 
-        return T
+        The view matrix is given in OpenGL convention (as a list of 16 floats in column-major order).
+
+        Steps:
+          1. Reshape the view matrix into a 4x4 matrix (V).
+          2. Invert V to get the camera pose (in world coordinates) in OpenGL coordinates.
+          3. Apply a correction to account for OpenGL’s coordinate convention:
+             multiply by a correction matrix C = diag([1, -1, -1, 1]).
+          4. Finally, invert the corrected camera pose to obtain the extrinsic matrix mapping world coordinates to camera coordinates.
+
+        This extrinsic matrix is appropriate to use with Open3D TSDFVolume.integrate().
+
+        References:
+          - Discussions on PyBullet forums and OpenGL conventions.
+        """
+        V = np.array(view_matrix).reshape((4, 4), order='F')
+        cam_pose = np.linalg.inv(V)
+        # Correction: flip Y and Z axes
+        correction = np.diag([1, -1, -1, 1])
+        corrected_pose = cam_pose @ correction
+        # Now, extrinsics map world -> camera:
+        extrinsics = np.linalg.inv(corrected_pose)
+        return extrinsics
