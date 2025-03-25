@@ -72,45 +72,43 @@ class IKSolver:
         self.C.setJointState(joint_states)
 
 
-        # for this part keep orientation in pybullet format for calulating relative rotation to get the orientation in ry_config ee
+        # for this part keep orientation in pybullet format for calulating relative rotation 
+        # to get the orientation in ry_config ee
         ee_pos, ee_ori = self.sim.robot.get_ee_pose() 
         l_gripper = self.C.getFrame("l_gripper")
         grip_ori = l_gripper.getPose()[3:]
         grip_ori = np.array([grip_ori[1], grip_ori[2], grip_ori[3], grip_ori[0]])
         r_grip_ori = R.from_quat(grip_ori)
         r_ee_ori = R.from_quat(ee_ori)
-        self.r_rel = (r_grip_ori*r_ee_ori.inv())#.as_matrix()
+        # Save this relative rotaion
+        self.r_rel = (r_grip_ori*r_ee_ori.inv())
 
 
-        #DEBUG
+        # #DEBUG
 
-        
-
-
-
-        l_panda_base.setShape(ry.ST.marker, [0.9])
-        b_frame = self.C.addFrame('pybullet-base')
-        b_frame.setShape(ry.ST.marker, [0.6])  # Adjust size as needed
-        b_frame.setPosition(robot_pos)
-        b_frame.setQuaternion(robot_ori)  # [w, x, y, z] convention
+        # l_panda_base.setShape(ry.ST.marker, [0.9])
+        # b_frame = self.C.addFrame('pybullet-base')
+        # b_frame.setShape(ry.ST.marker, [0.6])  # Adjust size as needed
+        # b_frame.setPosition(robot_pos)
+        # b_frame.setQuaternion(robot_ori)  # [w, x, y, z] convention
 
 
-        print(self.C.getFrameNames())
-        l_gripper = self.C.getFrame("l_gripper")
-        l_gripper.setShape(ry.ST.marker, [0.4])  # Adjust size as needed
+        # print(self.C.getFrameNames())
+        # l_gripper = self.C.getFrame("l_gripper")
+        # l_gripper.setShape(ry.ST.marker, [0.4])  # Adjust size as needed
 
 
-        frame = self.C.addFrame('pybullet-ee')
-        ee_pos, ee_ori = self.sim.robot.get_ee_pose()
-        frame.setShape(ry.ST.marker, [0.7])  # Adjust size as needed
-        frame.setPosition(ee_pos)
-        ee_ori = self.get_ry_ori(ee_ori)
-        # ee_ori = [ee_ori[3], ee_ori[0], ee_ori[1], ee_ori[2] ]
-        frame.setQuaternion(ee_ori)  # [w, x, y, z] convention
+        # frame = self.C.addFrame('pybullet-ee')
+        # ee_pos, ee_ori = self.sim.robot.get_ee_pose()
+        # frame.setShape(ry.ST.marker, [0.7])  # Adjust size as needed
+        # frame.setPosition(ee_pos)
+        # ee_ori = self.get_ry_ori(ee_ori)
+        # # ee_ori = [ee_ori[3], ee_ori[0], ee_ori[1], ee_ori[2] ]
+        # frame.setQuaternion(ee_ori)  # [w, x, y, z] convention
 
-        print(l_gripper.getPose())
-        self.C.view(True)
-        exit()
+        # print(l_gripper.getPose())
+        # self.C.view(True)
+        # exit()
 
         # Add wall
         wall = self.C.addFrame("wall")
@@ -144,7 +142,8 @@ class IKSolver:
            position and orientation
         """
         # Convert target position and orientation to ry coordinate system
-        target_ori = [target_ori[3], target_ori[0], target_ori[1], target_ori[2]]
+        # target_ori = [target_ori[3], target_ori[0], target_ori[1], target_ori[2]]
+        target_ori = self.get_ry_ori(target_ori)
         
         # Create a new frame for the debugging target
         target_frame = self.C.addFrame('target_marker')
@@ -198,8 +197,8 @@ class IKSolver:
         komo.addObjective([], ry.FS.position, ['l_gripper'], ry.OT.eq, [1e1], target_pos)
 
         # Set `l_gripper`'s orientation to `target_ori`
-        # komo.addObjective([], ry.FS.quaternion, ['l_gripper'], ry.OT.eq, [1e1], target_ori)
-        komo.addObjective([], ry.FS.quaternion, ['l_gripper'], ry.OT.sos, [1e1], target_ori)
+        komo.addObjective([], ry.FS.quaternion, ['l_gripper'], ry.OT.eq, [1e1], target_ori)
+        # komo.addObjective([], ry.FS.quaternion, ['l_gripper'], ry.OT.sos, [1e1], target_ori)
 
         # Keep the end-effector above the table
         komo.addObjective([], ry.FS.distance, ['l_gripper', 'l_panda_base'], ry.OT.ineq, [1e1], [0.05])
@@ -220,14 +219,16 @@ class IKSolver:
         #                 )
 
         # Solve for new joint positions & Target position
-        ret = ry.NLP_Solver(komo.nlp(), verbose=1 ) .solve()
+        ret = ry.NLP_Solver(komo.nlp(), verbose=0 ) .solve()
         if ret.feasible:
             print('-- Solution is feasible!')
         else:
             print('-- THIS IS INFEASIBLE!')
-            return None
+            # return None
         
         q = komo.getPath()
 
+        self.C.setJointState(q[0])
+        self.C.view(True)
         return q[0]
 

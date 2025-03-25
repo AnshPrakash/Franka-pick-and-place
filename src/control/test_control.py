@@ -3,6 +3,7 @@ import glob
 import yaml
 
 import numpy as np
+from scipy.spatial.transform import Rotation as R
 
 from typing import Dict, Any
 
@@ -40,11 +41,26 @@ def run_exp(config: Dict[str, Any]):
             print(f"Robot End Effector Orientation: {ee_ori}")  
             inverse_kinematics = IKSolver(sim)
             
-            target_pos, target_ori = p.getBasePositionAndOrientation(sim.object.id)
-            print(f"Target Pos: {target_pos}")
-            print(f"Target Ori: {target_ori}")
-            target_pos = np.array([-0.05018395, -0.46971428,  1.4 ])
-            q = inverse_kinematics.compute_target_configuration(target_pos, target_ori)
+            # target_pos, target_ori = p.getBasePositionAndOrientation(sim.object.id)
+            
+            # target_pos = np.array([-0.05018395, -0.46971428,  1.4 ])
+            # q = inverse_kinematics.compute_target_configuration(target_pos, target_ori)
+            object_views = {
+                'top': {'pos': [0, -0.65, 1.75], 'ori':[np.pi, 0, 0]},
+                'right': {'pos': [0, -0.3, 1.75], 'ori': [3/4 * np.pi, 0, 0]},
+                'left': {'pos': [0, -0.9, 1.75], 'ori': [5/4 * np.pi, 0, 0]}, # initially 5/4 * np.pi
+                'front': {'pos': [0.3, -0.65, 1.75], 'ori': [3/4 * np.pi, 0, -np.pi / 2]}, # [0, -3/4 * np.pi, 0]
+                'back': {'pos': [-0.3, -0.65, 1.75], 'ori': [3/4 * np.pi, 0, np.pi / 2]} # (0, 3/4 * np.pi, 0]
+            }
+            
+            for key,item in object_views.items():
+                print(f"Solve for {key}")
+                pos = item['pos']
+                ori = R.from_euler('xyz', item['ori']).as_quat()
+                q = inverse_kinematics.compute_target_configuration(pos, ori)
+
+
+
             print(f"New Joint Configuration: {q}")
             for i in range(10000):
                 if q is not None:
