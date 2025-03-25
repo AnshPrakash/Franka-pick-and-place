@@ -2,6 +2,7 @@ import numpy as np
 from src.simulation import Simulation
 import robotic as ry
 import pybullet as p
+from scipy.spatial.transform import Rotation as R
 
 class IKSolver:
     def __init__(self, sim: Simulation):
@@ -57,8 +58,8 @@ class IKSolver:
 
 
         table_pos = [table_pos[0], table_pos[1], self.sim.robot.tscale * 0.6] # 0.6 table height came from urdf file
-        self.C.getFrame("table").setPosition(table_pos)
-        self.C.getFrame("table").setQuaternion(table_ori)
+        table.setPosition(table_pos)
+        table.setQuaternion(table_ori)
 
         # Adjust robot position
         # Has to done after setting the table position because table is the parent of robot
@@ -70,13 +71,72 @@ class IKSolver:
         joint_states = self.sim.robot.get_joint_positions()
         self.C.setJointState(joint_states)
 
+
+        # for this part keep orientation in pybullet format for calulating relative rotation to get the orientation in ry_config ee
+        ee_pos, ee_ori = self.sim.robot.get_ee_pose() 
+        l_gripper = self.C.getFrame("l_gripper")
+        grip_ori = l_gripper.getPose()[3:]
+        grip_ori = np.array([grip_ori[1], grip_ori[2], grip_ori[3], grip_ori[0]])
+        r_grip_ori = R.from_quat(grip_ori)
+        r_ee_ori = R.from_quat(ee_ori)
+        self.r_rel = (r_grip_ori*r_ee_ori.inv())#.as_matrix()
+
+
+        #DEBUG
+
+        
+
+
+
+        l_panda_base.setShape(ry.ST.marker, [0.9])
+        b_frame = self.C.addFrame('pybullet-base')
+        b_frame.setShape(ry.ST.marker, [0.6])  # Adjust size as needed
+        b_frame.setPosition(robot_pos)
+        b_frame.setQuaternion(robot_ori)  # [w, x, y, z] convention
+
+
+        print(self.C.getFrameNames())
+        l_gripper = self.C.getFrame("l_gripper")
+        l_gripper.setShape(ry.ST.marker, [0.4])  # Adjust size as needed
+
+
+        frame = self.C.addFrame('pybullet-ee')
+        ee_pos, ee_ori = self.sim.robot.get_ee_pose()
+        frame.setShape(ry.ST.marker, [0.7])  # Adjust size as needed
+        frame.setPosition(ee_pos)
+        ee_ori = self.get_ry_ori(ee_ori)
+        # ee_ori = [ee_ori[3], ee_ori[0], ee_ori[1], ee_ori[2] ]
+        frame.setQuaternion(ee_ori)  # [w, x, y, z] convention
+
+        print(l_gripper.getPose())
+        self.C.view(True)
+        exit()
+
         # Add wall
         wall = self.C.addFrame("wall")
         wall.setShape(ry.ST.ssBox, [10, 10, 0.1, 0.01])
         wall.setPosition(wall_pos)
         wall.setQuaternion(wall_ori)
         wall.setColor([0.5, 0.5, 0.5])
+    
+    def get_ry_ori(self, orientation):
+        """
+            args:
+                orientation: from pybullet of ee
+            Output:
+                quat: For ry config of l_gripper
+        """
         
+        # Create rotation object from the PyBullet quaternion
+        r_pb = R.from_quat(orientation)
+
+        r = self.r_rel * r_pb #.as_matrix()
+
+        q = r.as_quat()
+        return [q[3], q[0], q[1], q[2]]
+
+
+
 
     def compute_target_configuration(self, target_pos, target_ori):
         """
