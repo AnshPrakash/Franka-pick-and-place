@@ -19,6 +19,7 @@ class IKSolver:
         self.C = C
         self._configure_ry()
         
+        
 
     def _configure_ry(self):
         """
@@ -34,11 +35,16 @@ class IKSolver:
         wall_pos, wall_ori = p.getBasePositionAndOrientation(self.sim.wall)
         
 
+        world = self.C.getFrame("world")
+        world.setShape(ry.ST.marker, [0.6])
+
+
         # Convert PyBullet quaternion [x, y, z, w] → RAI quaternion [w, x, y, z]
         table_ori = [table_ori[3], table_ori[0], table_ori[1], table_ori[2]]
         tray_ori = [tray_ori[3], tray_ori[0], tray_ori[1], tray_ori[2]]
-        robot_ori = [robot_ori[3], robot_ori[0], robot_ori[1], robot_ori[2]]  
-        wall_ori = [wall_ori[3], wall_ori[0], wall_ori[1], wall_ori[2]]
+        robot_ori = [robot_ori[3], robot_ori[0], robot_ori[1], robot_ori[2]]
+        wall_ori = [wall_ori[3], wall_ori[0], wall_ori[1], wall_ori[2] ]
+        
 
         # Create the tray frame
         # Get collision shape data (gives more accurate size)
@@ -50,11 +56,15 @@ class IKSolver:
         tray.setColor([0.5, 0.5, 0.5])  # Grey color
         tray.setPosition(tray_pos)  
         tray.setQuaternion(tray_ori)
+        tray.setShape(ry.ST.marker, [0.6])
 
         # Create the table frame
+        # self.C.delFrame("table")
+        # self.C.addFrame("table_")
         table = self.C.getFrame("table")
         table.setShape(ry.ST.ssBox, [2.5, 2.5, 0.05, 0.01])  # Full size, with corner radius
         table.setColor([0.2])  # Grey color
+        table.setShape(ry.ST.marker, [1.4])
 
 
         table_pos = [table_pos[0], table_pos[1], self.sim.robot.tscale * 0.6] # 0.6 table height came from urdf file
@@ -67,9 +77,18 @@ class IKSolver:
         l_panda_base = self.C.getFrame("l_panda_base")
         l_panda_base.setPosition(robot_pos)
         l_panda_base.setQuaternion(robot_ori)
+        l_panda_base.setShape(ry.ST.marker, [0.6])
 
         joint_states = self.sim.robot.get_joint_positions()
         self.C.setJointState(joint_states)
+
+        # Add wall
+        wall = self.C.addFrame("wall")
+        wall.setShape(ry.ST.ssBox, [10, 10, 0.1, 0.01])
+        wall.setPosition(wall_pos)
+        wall.setQuaternion(wall_ori)
+        wall.setColor([0.5, 0.5, 0.5])
+    
 
 
         # for this part keep orientation in pybullet format for calulating relative rotation 
@@ -94,15 +113,15 @@ class IKSolver:
 
 
         # print(self.C.getFrameNames())
-        # l_gripper = self.C.getFrame("l_gripper")
-        # l_gripper.setShape(ry.ST.marker, [0.4])  # Adjust size as needed
+        l_gripper = self.C.getFrame("l_gripper")
+        l_gripper.setShape(ry.ST.marker, [0.4])  # Adjust size as needed
 
 
         # frame = self.C.addFrame('pybullet-ee')
         # ee_pos, ee_ori = self.sim.robot.get_ee_pose()
         # frame.setShape(ry.ST.marker, [0.7])  # Adjust size as needed
         # frame.setPosition(ee_pos)
-        # ee_ori = self.get_ry_ori(ee_ori)
+        # ee_ori = self.get_ry_ee_ori(ee_ori)
         # # ee_ori = [ee_ori[3], ee_ori[0], ee_ori[1], ee_ori[2] ]
         # frame.setQuaternion(ee_ori)  # [w, x, y, z] convention
 
@@ -110,15 +129,10 @@ class IKSolver:
         # self.C.view(True)
         # exit()
 
-        # Add wall
-        wall = self.C.addFrame("wall")
-        wall.setShape(ry.ST.ssBox, [10, 10, 0.1, 0.01])
-        wall.setPosition(wall_pos)
-        wall.setQuaternion(wall_ori)
-        wall.setColor([0.5, 0.5, 0.5])
-    
-    def get_ry_ori(self, orientation):
+        
+    def get_ry_ee_ori(self, orientation):
         """
+            Note: Only for end-effector orientation in ry
             args:
                 orientation: from pybullet of ee
             Output:
@@ -143,10 +157,13 @@ class IKSolver:
         """
         # Convert target position and orientation to ry coordinate system
         # target_ori = [target_ori[3], target_ori[0], target_ori[1], target_ori[2]]
-        target_ori = self.get_ry_ori(target_ori)
+        target_ori = self.get_ry_ee_ori(target_ori)
         
         # Create a new frame for the debugging target
-        target_frame = self.C.addFrame('target_marker')
+        
+        target_frame = self.C.getFrame("target_marker")
+        if target_frame is None:
+            target_frame = self.C.addFrame('target_marker')
         target_frame.setShape(ry.ST.marker, [.4])  # Marker is visual only
         target_frame.setPosition(target_pos)
         target_frame.setQuaternion(target_ori)
@@ -162,10 +179,11 @@ class IKSolver:
         
         # # Get joint limits
         # j_lower, j_upper = self.sim.robot.get_joint_limits()
-
+        
         # Get Wall and base positions
-        wall_pos, wall_orn = p.getBasePositionAndOrientation(self.sim.wall)
-        wall_orn = [wall_orn[3], wall_orn[0], wall_orn[1], wall_orn[2]] # Convert to RAI quaternion
+        wall_pos, _ = p.getBasePositionAndOrientation(self.sim.wall)
+        print("Wall position", wall_pos)
+
 
         qHome = self.C.getJointState()
 
@@ -197,8 +215,8 @@ class IKSolver:
         komo.addObjective([], ry.FS.position, ['l_gripper'], ry.OT.eq, [1e1], target_pos)
 
         # Set `l_gripper`'s orientation to `target_ori`
-        komo.addObjective([], ry.FS.quaternion, ['l_gripper'], ry.OT.eq, [1e1], target_ori)
-        # komo.addObjective([], ry.FS.quaternion, ['l_gripper'], ry.OT.sos, [1e1], target_ori)
+        # komo.addObjective([], ry.FS.quaternion, ['l_gripper'], ry.OT.eq, [1e1], target_ori)
+        komo.addObjective([], ry.FS.quaternion, ['l_gripper'], ry.OT.sos, [1e3], target_ori)
 
         # Keep the end-effector above the table
         komo.addObjective([], ry.FS.distance, ['l_gripper', 'l_panda_base'], ry.OT.ineq, [1e1], [0.05])
@@ -219,7 +237,7 @@ class IKSolver:
         #                 )
 
         # Solve for new joint positions & Target position
-        ret = ry.NLP_Solver(komo.nlp(), verbose=0 ) .solve()
+        ret = ry.NLP_Solver(komo.nlp(), verbose=1 ) .solve()
         if ret.feasible:
             print('-- Solution is feasible!')
         else:

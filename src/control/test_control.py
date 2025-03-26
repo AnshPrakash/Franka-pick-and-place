@@ -58,8 +58,8 @@ def run_exp(config: Dict[str, Any]):
                 pos = item['pos']
                 ori = R.from_euler('xyz', item['ori']).as_quat()
                 q = inverse_kinematics.compute_target_configuration(pos, ori)
-
-
+                
+                
 
             print(f"New Joint Configuration: {q}")
             for i in range(10000):
