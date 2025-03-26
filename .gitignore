@@ -162,6 +162,10 @@ cython_debug/
 .idea/
 
 *pybullet-object-models
+<<<<<<< HEAD
 z.log.global
+=======
+*z.log.global
+>>>>>>> main
 tutorials
 ry_configs

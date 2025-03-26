@@ -5,7 +5,6 @@ import numpy as np
 import open3d as o3d
 from scipy.spatial.transform import Rotation as R
 import trimesh
-
 from src.utils import get_pcd_from_numpy, get_robot_view_matrix
 
 import pybullet as p

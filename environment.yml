@@ -12,3 +12,7 @@ dependencies:
       - open3d
       - trimesh
       - robotic
+<<<<<<< HEAD
+=======
+      - filterpy
+>>>>>>> main
