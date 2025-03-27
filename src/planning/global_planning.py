@@ -1,8 +1,10 @@
 import numpy as np
-from src.simulation import Simulation
-from src.control import IKSolver
 import robotic as ry
 import pybullet as p
+
+from src.simulation import Simulation
+from src.control import IKSolver
+from src.tracking import Track
 
 
 class Global_planner(IKSolver):
@@ -13,12 +15,21 @@ class Global_planner(IKSolver):
             and orientation.
         """
         super.__init__(sim)
-        self.obstacles = {"ob1" : {}, "ob2" : {} }
+        
+        self.obstacles_tracker = []
+        for obstacle in self.sim.obstacles:
+            self.obstacles_tracker.append(Track(obstacle.id,sim))
 
-    def update_obstacles(self):
-        
-        pass
-        
+    def get_obstacles(self) -> list:
+        """
+            Get the center of obstacle centers and their radii
+            Output: List[(position, size)]
+        """
+        obstacles = []
+        for tracker in self.obstacles_tracker:
+            obstacles.append((tracker.estimate_position(), tracker.object_size))
+        return obstacles
+
         
     def plan(self, target_pos, target_ori):
         """
