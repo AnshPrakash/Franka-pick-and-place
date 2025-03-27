@@ -14,41 +14,10 @@ class IKSolver:
         self.sim = sim
 
         C = ry.Config()
-        # C.addFile('panda_irobman.g')
         C.addFile(ry.raiPath('scenarios/panda_irobman.g'))
 
         self.C = C
         
-        for joint_name in C.getJointNames():
-            print("==========\n")
-            print(joint_name)
-            joint = C.getFrame(joint_name)
-            print(joint.getAttributes())
-            # limits = joint.getAttributes()['limits']
-            
-            # C.setJointLimits(joint_name, np.array(limits))
-            # joint.setAttribute('limits', limits)
-
-            # print(joint.setAttribute('limit',0))
-            
-            # frame_name = frame.
-            # print("Frame name: ", frame_name)
-            # print(frame.getAttributes())
-            # if frame.joint is not None:
-            #     # If joint limits were defined in the .g file, they might be stored as an attribute:
-            #     limits = frame.getAttribute('jointLimits')  # returns [lower, upper]
-            #     if limits is not None:
-            #         print(f"Joint {frame.name} limits: {limits}")
-            #     else:
-            #         print(f"Joint {frame.name} has no defined limits.")
-        print(C.getJointIDs())
-        print(C.getJointState())
-        print('joints:', C.getJointNames())
-        print("ry config Joint limits : ", C.getJointLimits())
-        
-        print("Joint limits in Pybullet", self.sim.robot.get_joint_limits())
-        exit()
-
         self._configure_ry()
         
         
@@ -91,8 +60,6 @@ class IKSolver:
         tray.setShape(ry.ST.marker, [0.6])
 
         # Create the table frame
-        # self.C.delFrame("table")
-        # self.C.addFrame("table_")
         table = self.C.getFrame("table")
         table.setShape(ry.ST.ssBox, [2.5, 2.5, 0.05, 0.01])  # Full size, with corner radius
         table.setColor([0.2])  # Grey color
@@ -132,10 +99,10 @@ class IKSolver:
 
 
         # print(self.C.getFrameNames())
-        l_gripper = self.C.getFrame("l_gripper")
-        l_gripper.setShape(ry.ST.marker, [0.4])  # Adjust size as needed
-        print("Gripper position",  l_gripper.getPosition())
-        print("EE position", self.sim.robot.get_ee_pose()[0] )
+        # l_gripper = self.C.getFrame("l_gripper")
+        # l_gripper.setShape(ry.ST.marker, [0.4])  # Adjust size as needed
+        # print("Gripper position",  l_gripper.getPosition())
+        # print("EE position", self.sim.robot.get_ee_pose()[0] )
 
 
 
@@ -222,7 +189,6 @@ class IKSolver:
         
         # Get Wall and base positions
         wall_pos, _ = p.getBasePositionAndOrientation(self.sim.wall)
-        print("Wall position", wall_pos)
 
 
         qHome = self.C.getJointState()
@@ -248,7 +214,7 @@ class IKSolver:
         komo.addObjective([], ry.FS.accumulatedCollisions, [], ry.OT.sos, [1e1])
 
         # keep the joint limits safe
-        # komo.addObjective([], ry.FS.jointLimits, [], ry.OT.ineq)
+        komo.addObjective([], ry.FS.jointLimits, [], ry.OT.ineq)
 
         # Move to the target position
         # the left gripper (`l_gripper`) to `target_pos`
@@ -266,7 +232,7 @@ class IKSolver:
         
         # komo.addObjective([], ry.FS.positionDiff, ['l_gripper'], ry.OT.ineq, np.diag([-1e1, 0, 0]), [wall_pos[0], 0 ,0 ])
         komo.addObjective([], ry.FS.position, ['l_gripper'], ry.OT.ineq, np.diag([-1e1, 0.0, 0.0]), [wall_pos[0]])
-        # komo.addObjective([], ry.FS.position, ['l_gripper'], ry.OT.sos, [1e1], [-0.6, None, None])
+        # komo.addObjective([], ry.FS.position, ['l_gripper'], ry.OT.sos, [-1e1], [-0.6, None, None])
         # komo.addObjective(
         #                     [],                  # time slice: apply everywhere or specify particular slices
         #                     ry.FS.positionDiff,  # feature: position difference
@@ -277,17 +243,17 @@ class IKSolver:
         #                 )
 
         # Solve for new joint positions & Target position
-        ret = ry.NLP_Solver(komo.nlp(), verbose=1 ) .solve()
+        ret = ry.NLP_Solver(komo.nlp(), verbose=0 ).solve()
         if ret.feasible:
             print('-- Solution is feasible!')
         else:
             print('-- THIS IS INFEASIBLE!')
-            # return None
+            return None
         
         q = komo.getPath()
 
-        self.C.setJointState(q[0])
-        self.C.view(True)
-        # exit()
+        # self.C.setJointState(q[0])
+        # self.C.view(True)
+
         return q[0]
 

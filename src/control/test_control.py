@@ -46,12 +46,12 @@ def run_exp(config: Dict[str, Any]):
             # target_pos = np.array([-0.05018395, -0.46971428,  1.4 ])
             # q = inverse_kinematics.compute_target_configuration(target_pos, target_ori)
             object_views = {
-                # 'test': {'pos': [0, -0.65, 1.9], 'ori':[0, 0, 0]},
-                'top': {'pos': [0, -0.65, 1.9], 'ori':[np.pi, 0, 0]},
-                'right': {'pos': [0, -0.3, 1.9], 'ori': [7/8 * np.pi, 0, 0]},
-                'left': {'pos': [0, -0.9, 1.9], 'ori': [9/8 * np.pi, 0, 0]}, # initially 5/4 * np.pi
-                'front': {'pos': [0.3, -0.65, 1.9], 'ori': [3/4 * np.pi, 0, -np.pi / 2]}, # [0, -3/4 * np.pi, 0]
-                'back': {'pos': [-0.3, -0.65, 1.9], 'ori': [3/4 * np.pi, 0, np.pi / 2]} # (0, 3/4 * np.pi, 0]
+                'test': {'pos': [0, -2.65, 1.9], 'ori':[0, 0, 0]},
+                # 'top': {'pos': [0, -0.65, 1.9], 'ori':[np.pi, 0, 0]},
+                # 'right': {'pos': [0, -0.3, 1.9], 'ori': [7/8 * np.pi, 0, 0]},
+                # 'left': {'pos': [0, -0.9, 1.9], 'ori': [9/8 * np.pi, 0, 0]}, # initially 5/4 * np.pi
+                # 'front': {'pos': [0.3, -0.65, 1.9], 'ori': [3/4 * np.pi, 0, -np.pi / 2]}, # [0, -3/4 * np.pi, 0]
+                # 'back': {'pos': [-0.3, -0.65, 1.9], 'ori': [3/4 * np.pi, 0, np.pi / 2]} # (0, 3/4 * np.pi, 0]
             }
             
             for key,item in object_views.items():
@@ -59,16 +59,18 @@ def run_exp(config: Dict[str, Any]):
                 pos = item['pos']
                 ori = R.from_euler('xyz', item['ori']).as_quat()
                 qu = inverse_kinematics.compute_target_configuration(pos, ori)
+                # pybullet never fails it still returns some value
                 qb = p.calculateInverseKinematics(sim.robot.id, sim.robot.ee_idx, pos, ori)[:-2]
                 print("=====================")
                 print("Our solution:  ", qu)
                 print("From pybullet: ", qb)
                 print("=====================")
-                
-            pos = item['pos']
-            ori = R.from_euler('xyz', item['ori']).as_quat()
-            qu = inverse_kinematics.compute_target_configuration(pos, ori)
-            print(f"New Joint Configuration: {q}")
+
+            # pos = item['pos']
+            # ori = R.from_euler('xyz', item['ori']).as_quat()
+            # qu = inverse_kinematics.compute_target_configuration(pos, ori)
+            # print(f"New Joint Configuration: {qu}")
+            q  = qb
             for i in range(10000):
                 if q is not None:
                     sim.robot.position_control(q)
