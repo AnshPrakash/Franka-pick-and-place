@@ -31,48 +31,123 @@ class Global_planner(IKSolver):
         return obstacles
 
         
+    # def plan(self, target_pos, target_ori):
+    #     """
+    #     Compute a collision-free path to the target position using RRT-based planning.
+        
+    #     Args:
+    #         target_pos: The desired end-effector position.
+    #         target_ori: The desired end-effector orientation in PyBullet format.
+        
+    #     Returns:
+    #         path: A numpy array containing a sequence of joint configurations representing the planned path,
+    #             or None if planning fails.
+    #     """
+    #     # 1. Compute goal configuration using IK
+    #     qT = self.compute_target_configuration(target_pos, target_ori)
+    #     if qT is None:
+    #         print("IK failed to compute a goal configuration.")
+    #         return None
+
+    #     # 2. Get the current configuration
+    #     q0 = self.C.getJointState()
+    #     print("Start configuration (q0):", q0)
+    #     print("Goal configuration (qT):", qT)
+
+    #     # 3. Create an instance of the RRT_PathFinder
+    #     rrt = ry.RRT_PathFinder()
+    #     # Optionally, if needed, set the problem configuration
+    #     rrt.setProblem(self.C)
+
+    #     # 4. Set start and goal configurations
+    #     rrt.setStartGoal([q0], [qT])
+
+    #     # 5. Solve the planning problem
+    #     ret = rrt.solve()
+    #     if not ret.feasible:
+    #         print("Path planning returned an infeasible solution.")
+    #         return None
+
+    #     # 6. Retrieve the path; this method might return a resampled path
+    #     path = ret.x
+    #     print("Path found with", path.shape[0], "configurations.")
+
+    #     # 7. Optional: Visualize the planned path
+    #     import time
+    #     for t in range(path.shape[0]):
+    #         self.C.setJointState(path[t])
+    #         self.C.view(False, f'Path slice {t}')
+    #         time.sleep(0.1)
+
+    #     return path
+    
+
     def plan(self, target_pos, target_ori):
         """
-        Compute a collision-free path to the target position using RRT-based planning.
+        Compute a collision-free path to the goal position using RRT-based planning,
+        taking into account two spherical obstacles.
         
         Args:
-            target_pos: The desired end-effector position.
-            target_ori: The desired end-effector orientation in PyBullet format.
+            target_pos: Desired end-effector position.
+            target_ori: Desired end-effector orientation in PyBullet quaternion format.
         
         Returns:
-            path: A numpy array containing a sequence of joint configurations representing the planned path,
-                or None if planning fails.
+            A numpy array with the planned path (a sequence of joint configurations), or
+            None if planning fails.
         """
-        # 1. Compute goal configuration using IK
+        # 1. Compute the goal configuration (qT) using IK.
         qT = self.compute_target_configuration(target_pos, target_ori)
         if qT is None:
             print("IK failed to compute a goal configuration.")
             return None
 
-        # 2. Get the current configuration
+        # 2. Get the current robot configuration (q0)
         q0 = self.C.getJointState()
         print("Start configuration (q0):", q0)
         print("Goal configuration (qT):", qT)
 
-        # 3. Create an instance of the RRT_PathFinder
+        # 3. Add obstacles to the configuration as proper collision objects.
+        #    get_obstacles() returns a list of (position, radius) tuples.
+        obstacles = self.get_obstacles()
+        obstacle_names = []
+        for i, (pos, radius) in enumerate(obstacles):
+            obs_name = f"obstacle_{i}"
+            # Check if an obstacle frame already exists; if not, add it.
+            obs = self.C.getFrame(obs_name)
+            if obs is None:
+                obs = self.C.addFrame(obs_name)
+            # Use a sphere shape (not a marker) so it can be used for collision checking.
+            obs.setShape(ry.ST.sphere, [radius])
+            obs.setPosition(pos)
+            obs.setColor([1.0, 0.0, 0.0])  # Red for obstacles.
+            obstacle_names.append(obs_name)
+
+        # 4. Create an instance of the RRT planner.
         rrt = ry.RRT_PathFinder()
-        # Optionally, if needed, set the problem configuration
+        # Set the planning problem using the current configuration.
         rrt.setProblem(self.C)
-
-        # 4. Set start and goal configurations
+        # Set the start and goal configurations.
         rrt.setStartGoal([q0], [qT])
-
-        # 5. Solve the planning problem
+        
+        # 5. Explicitly add collision pairs: make sure that the left gripper and each obstacle are checked.
+        collision_pairs = []
+        for obs_name in obstacle_names:
+            # Each collision pair is specified as two frame names.
+            collision_pairs.extend(["l_gripper", obs_name])
+        if collision_pairs:
+            rrt.setExplicitCollisionPairs(collision_pairs)
+        
+        # 6. Solve the planning problem.
         ret = rrt.solve()
         if not ret.feasible:
             print("Path planning returned an infeasible solution.")
             return None
 
-        # 6. Retrieve the path; this method might return a resampled path
+        # 7. Retrieve the resampled path.
         path = ret.x
         print("Path found with", path.shape[0], "configurations.")
 
-        # 7. Optional: Visualize the planned path
+        # Visualize the planned path.
         import time
         for t in range(path.shape[0]):
             self.C.setJointState(path[t])
@@ -80,77 +155,3 @@ class Global_planner(IKSolver):
             time.sleep(0.1)
 
         return path
-    
-
-    # def plan(self, target_pos, target_ori):
-    #     """
-    #     Compute a collision-free path to the goal position using RRT-based planning,
-    #     taking into account two spherical obstacles.
-        
-    #     Args:
-    #         target_pos: Desired end-effector position.
-    #         target_ori: Desired end-effector orientation in PyBullet quaternion format.
-        
-    #     Returns:
-    #         A numpy array with the planned path (a sequence of joint configurations), or
-    #         None if planning fails.
-    #     """
-    #     # 1. Compute the goal configuration (qT) using IK.
-    #     qT = self.compute_target_configuration(target_pos, target_ori)
-    #     if qT is None:
-    #         print("IK failed to compute a goal configuration.")
-    #         return None
-
-    #     # 2. Get the current robot configuration (q0)
-    #     q0 = self.C.getJointState()
-    #     print("Start configuration (q0):", q0)
-    #     print("Goal configuration (qT):", qT)
-
-    #     # 3. Add obstacles to the configuration as proper collision objects.
-    #     #    get_obstacles() returns a list of (position, radius) tuples.
-    #     obstacles = self.get_obstacles()
-    #     obstacle_names = []
-    #     for i, (pos, radius) in enumerate(obstacles):
-    #         obs_name = f"obstacle_{i}"
-    #         # Check if an obstacle frame already exists; if not, add it.
-    #         obs = self.C.getFrame(obs_name)
-    #         if obs is None:
-    #             obs = self.C.addFrame(obs_name)
-    #         # Use a sphere shape (not a marker) so it can be used for collision checking.
-    #         obs.setShape(ry.ST.sphere, [radius])
-    #         obs.setPosition(pos)
-    #         obs.setColor([1.0, 0.0, 0.0])  # Red for obstacles.
-    #         obstacle_names.append(obs_name)
-
-    #     # 4. Create an instance of the RRT planner.
-    #     rrt = ry.RRT_PathFinder()
-    #     # Set the planning problem using the current configuration.
-    #     rrt.setProblem(self.C)
-    #     # Set the start and goal configurations.
-    #     rrt.setStartGoal([q0], [qT])
-        
-    #     # 5. Explicitly add collision pairs: make sure that the left gripper and each obstacle are checked.
-    #     collision_pairs = []
-    #     for obs_name in obstacle_names:
-    #         # Each collision pair is specified as two frame names.
-    #         collision_pairs.extend(["l_gripper", obs_name])
-    #     if collision_pairs:
-    #         rrt.setExplicitCollisionPairs(collision_pairs)
-        
-    #     # 6. Solve the planning problem.
-    #     ret = rrt.solve()
-    #     if not ret.feasible:
-    #         print("Path planning returned an infeasible solution.")
-    #         return None
-
-    #     # 7. Retrieve the resampled path.
-    #     path = rrt.get_resampledPath()
-    #     print("Path found with", path.shape[0], "configurations.")
-
-    #     # Optional: Visualize the planned path.
-    #     for t in range(path.shape[0]):
-    #         self.C.setJointState(path[t])
-    #         self.C.view(False, f'Path slice {t}')
-    #         # time.sleep(0.1)
-
-    #     return path
