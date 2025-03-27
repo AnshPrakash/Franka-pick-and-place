@@ -14,9 +14,41 @@ class IKSolver:
         self.sim = sim
 
         C = ry.Config()
-        C.addFile(ry.raiPath('scenarios/pandaSingle.g'))
+        # C.addFile('panda_irobman.g')
+        C.addFile(ry.raiPath('scenarios/panda_irobman.g'))
 
         self.C = C
+        
+        for joint_name in C.getJointNames():
+            print("==========\n")
+            print(joint_name)
+            joint = C.getFrame(joint_name)
+            print(joint.getAttributes())
+            # limits = joint.getAttributes()['limits']
+            
+            # C.setJointLimits(joint_name, np.array(limits))
+            # joint.setAttribute('limits', limits)
+
+            # print(joint.setAttribute('limit',0))
+            
+            # frame_name = frame.
+            # print("Frame name: ", frame_name)
+            # print(frame.getAttributes())
+            # if frame.joint is not None:
+            #     # If joint limits were defined in the .g file, they might be stored as an attribute:
+            #     limits = frame.getAttribute('jointLimits')  # returns [lower, upper]
+            #     if limits is not None:
+            #         print(f"Joint {frame.name} limits: {limits}")
+            #     else:
+            #         print(f"Joint {frame.name} has no defined limits.")
+        print(C.getJointIDs())
+        print(C.getJointState())
+        print('joints:', C.getJointNames())
+        print("ry config Joint limits : ", C.getJointLimits())
+        
+        print("Joint limits in Pybullet", self.sim.robot.get_joint_limits())
+        exit()
+
         self._configure_ry()
         
         
@@ -102,6 +134,9 @@ class IKSolver:
         # print(self.C.getFrameNames())
         l_gripper = self.C.getFrame("l_gripper")
         l_gripper.setShape(ry.ST.marker, [0.4])  # Adjust size as needed
+        print("Gripper position",  l_gripper.getPosition())
+        print("EE position", self.sim.robot.get_ee_pose()[0] )
+
 
 
         # frame = self.C.addFrame('pybullet-ee')
@@ -173,7 +208,7 @@ class IKSolver:
         target_frame.setPosition(target_pos)
         target_frame.setQuaternion(target_ori)
         target_frame.setColor([0.0, 1.0, 0.0])  # Green marker
-        self.C.view(True)
+        
         # Get current robot state
         joint_states = self.sim.robot.get_joint_positions()
 
@@ -213,15 +248,15 @@ class IKSolver:
         komo.addObjective([], ry.FS.accumulatedCollisions, [], ry.OT.sos, [1e1])
 
         # keep the joint limits safe
-        komo.addObjective([], ry.FS.jointLimits, [], ry.OT.ineq)
+        # komo.addObjective([], ry.FS.jointLimits, [], ry.OT.ineq)
 
         # Move to the target position
         # the left gripper (`l_gripper`) to `target_pos`
         komo.addObjective([], ry.FS.position, ['l_gripper'], ry.OT.eq, [1e1], target_pos)
 
         # Set `l_gripper`'s orientation to `target_ori`
-        # komo.addObjective([], ry.FS.quaternion, ['l_gripper'], ry.OT.eq, [1e1], target_ori)
-        komo.addObjective([], ry.FS.quaternion, ['l_gripper'], ry.OT.sos, [1e3], target_ori)
+        komo.addObjective([], ry.FS.quaternion, ['l_gripper'], ry.OT.eq, [1e1], target_ori)
+        # komo.addObjective([], ry.FS.quaternion, ['l_gripper'], ry.OT.sos, [1e1], target_ori)
 
         # Keep the end-effector above the table
         komo.addObjective([], ry.FS.distance, ['l_gripper', 'l_panda_base'], ry.OT.ineq, [1e1], [0.05])

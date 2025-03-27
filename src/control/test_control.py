@@ -65,8 +65,9 @@ def run_exp(config: Dict[str, Any]):
                 print("From pybullet: ", qb)
                 print("=====================")
                 
-                
-
+            pos = item['pos']
+            ori = R.from_euler('xyz', item['ori']).as_quat()
+            qu = inverse_kinematics.compute_target_configuration(pos, ori)
             print(f"New Joint Configuration: {q}")
             for i in range(10000):
                 if q is not None:
