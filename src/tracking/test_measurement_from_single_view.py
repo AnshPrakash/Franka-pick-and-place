@@ -43,7 +43,7 @@ def run_exp(config: Dict[str, Any]):
             for i in range(10000):
                 obstacle_pos = sim.obstacles[0]._get_pos()
                 print(f"[{i}] Obstacle 1 Pos: {obstacle_pos}")
-                object_estimated_pos = track_obs1.estimate_position(obstacle_pos)
+                object_estimated_pos = track_obs1.estimate_position()
                 print(f"[{i}] Obstacle 1 Estimated Pos: {object_estimated_pos}")
                 sim.step()
                 # for getting renders

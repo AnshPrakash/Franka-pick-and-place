@@ -79,7 +79,7 @@ class Track:
 
     
         
-    def estimate_position(self, measurement: list):
+    def estimate_position(self):
         """Get the position of the object in the scene."""
         # Use the segmentation mask, depth image, and RGB image to estimate the position of the object
         # segmentation mask to extract the object
