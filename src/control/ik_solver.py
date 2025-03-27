@@ -90,19 +90,6 @@ class IKSolver:
         wall.setColor([0.5, 0.5, 0.5])
     
 
-
-        # for this part keep orientation in pybullet format for calulating relative rotation 
-        # to get the orientation in ry_config ee
-        ee_pos, ee_ori = self.sim.robot.get_ee_pose() 
-        l_gripper = self.C.getFrame("l_gripper")
-        grip_ori = l_gripper.getPose()[3:]
-        grip_ori = np.array([grip_ori[1], grip_ori[2], grip_ori[3], grip_ori[0]])
-        r_grip_ori = R.from_quat(grip_ori)
-        r_ee_ori = R.from_quat(ee_ori)
-        # Save this relative rotaion
-        self.r_rel = (r_grip_ori*r_ee_ori.inv())
-
-
         # #DEBUG
 
         # l_panda_base.setShape(ry.ST.marker, [0.9])
@@ -124,28 +111,46 @@ class IKSolver:
         # ee_ori = self.get_ry_ee_ori(ee_ori)
         # # ee_ori = [ee_ori[3], ee_ori[0], ee_ori[1], ee_ori[2] ]
         # frame.setQuaternion(ee_ori)  # [w, x, y, z] convention
-
+        
         # print(l_gripper.getPose())
-        # self.C.view(True)
-        # exit()
 
         
     def get_ry_ee_ori(self, orientation):
         """
-            Note: Only for end-effector orientation in ry
-            args:
-                orientation: from pybullet of ee
-            Output:
-                quat: For ry config of l_gripper
-        """
+        Convert a PyBullet end-effector orientation quaternion to the corresponding 
+        RAi configuration orientation for the 'l_gripper' frame.
+
+        Args:
+            orientation: A quaternion from PyBullet for the end-effector in [x, y, z, w] order.
         
-        # Create rotation object from the PyBullet quaternion
-        r_pb = R.from_quat(orientation)
+        Returns:
+            A quaternion for the RAi configuration of l_gripper in [w, x, y, z] order.
+        """
+        # Create a Rotation object from the PyBullet quaternion (format: [x, y, z, w])
+        r_pb = R.from_quat(orientation)  
+        
+        # Define the transformation matrix T:
+        # This matrix swaps the x and y axes and flips the z axis.
+        T = np.array([[0, 1, 0],
+                    [1, 0, 0],
+                    [0, 0, -1]])
+            
+        # Create a rotation object from the transformation matrix
+        T_rot = R.from_matrix(T)
 
-        r = self.r_rel * r_pb #.as_matrix()
-
+        # Apply the stored relative rotation (r_rel was computed as: 
+        # r_rel = r_grip_ori * r_ee_ori.inv() to convert from ee orientation to l_gripper orientation)
+        r = T_rot * r_pb
+        
+        # Get the resulting quaternion in PyBullet convention ([x, y, z, w])
         q = r.as_quat()
-        return [q[3], q[0], q[1], q[2]]
+
+        # Convert to RAi convention ([w, x, y, z])
+        q_rai = [q[3], q[0], q[1], q[2]]
+        
+        
+        return q_rai
+
 
 
 
@@ -168,7 +173,7 @@ class IKSolver:
         target_frame.setPosition(target_pos)
         target_frame.setQuaternion(target_ori)
         target_frame.setColor([0.0, 1.0, 0.0])  # Green marker
-
+        self.C.view(True)
         # Get current robot state
         joint_states = self.sim.robot.get_joint_positions()
 
@@ -248,5 +253,6 @@ class IKSolver:
 
         self.C.setJointState(q[0])
         self.C.view(True)
+        # exit()
         return q[0]
 
