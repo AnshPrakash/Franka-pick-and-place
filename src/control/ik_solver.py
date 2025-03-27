@@ -99,8 +99,8 @@ class IKSolver:
 
 
         # print(self.C.getFrameNames())
-        # l_gripper = self.C.getFrame("l_gripper")
-        # l_gripper.setShape(ry.ST.marker, [0.4])  # Adjust size as needed
+        l_gripper = self.C.getFrame("l_gripper")
+        l_gripper.setShape(ry.ST.marker, [0.4])  # Adjust size as needed
         # print("Gripper position",  l_gripper.getPosition())
         # print("EE position", self.sim.robot.get_ee_pose()[0] )
 
@@ -221,8 +221,8 @@ class IKSolver:
         komo.addObjective([], ry.FS.position, ['l_gripper'], ry.OT.eq, [1e1], target_pos)
 
         # Set `l_gripper`'s orientation to `target_ori`
-        komo.addObjective([], ry.FS.quaternion, ['l_gripper'], ry.OT.eq, [1e1], target_ori)
-        # komo.addObjective([], ry.FS.quaternion, ['l_gripper'], ry.OT.sos, [1e1], target_ori)
+        # komo.addObjective([], ry.FS.quaternion, ['l_gripper'], ry.OT.eq, [1e1], target_ori)
+        komo.addObjective([], ry.FS.quaternion, ['l_gripper'], ry.OT.sos, [1e2], target_ori)
 
         # Keep the end-effector above the table
         komo.addObjective([], ry.FS.distance, ['l_gripper', 'l_panda_base'], ry.OT.ineq, [1e1], [0.05])
@@ -243,7 +243,7 @@ class IKSolver:
         #                 )
 
         # Solve for new joint positions & Target position
-        ret = ry.NLP_Solver(komo.nlp(), verbose=0 ).solve()
+        ret = ry.NLP_Solver(komo.nlp(), verbose=1 ).solve()
         if ret.feasible:
             print('-- Solution is feasible!')
         else:
