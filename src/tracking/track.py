@@ -41,10 +41,10 @@ class Track:
                                              q = 0.3)
     
     def measure(self):
-        pcb_obj = self.perception.get_pcds( [self.obj_id],
+        pcb_obj = self.perception.get_pcd(   self.obj_id,
                                              self.sim, 
                                              use_ee = False)
-        points = np.asarray(pcb_obj[self.obj_id].points)
+        points = np.asarray(pcb_obj.points)
         
         # solve least squares to estimate the center of the circle
 
