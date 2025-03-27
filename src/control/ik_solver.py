@@ -2,6 +2,7 @@ import numpy as np
 from src.simulation import Simulation
 import robotic as ry
 import pybullet as p
+from scipy.spatial.transform import Rotation as R
 
 class IKSolver:
     def __init__(self, sim: Simulation):
@@ -13,10 +14,12 @@ class IKSolver:
         self.sim = sim
 
         C = ry.Config()
-        C.addFile(ry.raiPath('scenarios/pandaSingle.g'))
+        C.addFile(ry.raiPath('scenarios/panda_irobman.g'))
 
         self.C = C
+        
         self._configure_ry()
+        
         
 
     def _configure_ry(self):
@@ -33,11 +36,16 @@ class IKSolver:
         wall_pos, wall_ori = p.getBasePositionAndOrientation(self.sim.wall)
         
 
+        world = self.C.getFrame("world")
+        world.setShape(ry.ST.marker, [0.6])
+
+
         # Convert PyBullet quaternion [x, y, z, w] → RAI quaternion [w, x, y, z]
         table_ori = [table_ori[3], table_ori[0], table_ori[1], table_ori[2]]
         tray_ori = [tray_ori[3], tray_ori[0], tray_ori[1], tray_ori[2]]
-        robot_ori = [robot_ori[3], robot_ori[0], robot_ori[1], robot_ori[2]]  
-        wall_ori = [wall_ori[3], wall_ori[0], wall_ori[1], wall_ori[2]]
+        robot_ori = [robot_ori[3], robot_ori[0], robot_ori[1], robot_ori[2]]
+        wall_ori = [wall_ori[3], wall_ori[0], wall_ori[1], wall_ori[2] ]
+        
 
         # Create the tray frame
         # Get collision shape data (gives more accurate size)
@@ -49,16 +57,18 @@ class IKSolver:
         tray.setColor([0.5, 0.5, 0.5])  # Grey color
         tray.setPosition(tray_pos)  
         tray.setQuaternion(tray_ori)
+        tray.setShape(ry.ST.marker, [0.6])
 
         # Create the table frame
         table = self.C.getFrame("table")
         table.setShape(ry.ST.ssBox, [2.5, 2.5, 0.05, 0.01])  # Full size, with corner radius
         table.setColor([0.2])  # Grey color
+        table.setShape(ry.ST.marker, [1.4])
 
 
         table_pos = [table_pos[0], table_pos[1], self.sim.robot.tscale * 0.6] # 0.6 table height came from urdf file
-        self.C.getFrame("table").setPosition(table_pos)
-        self.C.getFrame("table").setQuaternion(table_ori)
+        table.setPosition(table_pos)
+        table.setQuaternion(table_ori)
 
         # Adjust robot position
         # Has to done after setting the table position because table is the parent of robot
@@ -66,6 +76,7 @@ class IKSolver:
         l_panda_base = self.C.getFrame("l_panda_base")
         l_panda_base.setPosition(robot_pos)
         l_panda_base.setQuaternion(robot_ori)
+        l_panda_base.setShape(ry.ST.marker, [0.6])
 
         joint_states = self.sim.robot.get_joint_positions()
         self.C.setJointState(joint_states)
@@ -76,7 +87,75 @@ class IKSolver:
         wall.setPosition(wall_pos)
         wall.setQuaternion(wall_ori)
         wall.setColor([0.5, 0.5, 0.5])
+    
+
+        # #DEBUG
+
+        # l_panda_base.setShape(ry.ST.marker, [0.9])
+        # b_frame = self.C.addFrame('pybullet-base')
+        # b_frame.setShape(ry.ST.marker, [0.6])  # Adjust size as needed
+        # b_frame.setPosition(robot_pos)
+        # b_frame.setQuaternion(robot_ori)  # [w, x, y, z] convention
+
+
+        # print(self.C.getFrameNames())
+        l_gripper = self.C.getFrame("l_gripper")
+        l_gripper.setShape(ry.ST.marker, [0.4])  # Adjust size as needed
+        # print("Gripper position",  l_gripper.getPosition())
+        # print("EE position", self.sim.robot.get_ee_pose()[0] )
+
+
+
+        # frame = self.C.addFrame('pybullet-ee')
+        # ee_pos, ee_ori = self.sim.robot.get_ee_pose()
+        # frame.setShape(ry.ST.marker, [0.7])  # Adjust size as needed
+        # frame.setPosition(ee_pos)
+        # ee_ori = self.get_ry_ee_ori(ee_ori)
+        # # ee_ori = [ee_ori[3], ee_ori[0], ee_ori[1], ee_ori[2] ]
+        # frame.setQuaternion(ee_ori)  # [w, x, y, z] convention
         
+        # print(l_gripper.getPose())
+
+        
+    def get_ry_ee_ori(self, orientation):
+        """
+        Convert a PyBullet end-effector orientation quaternion to the corresponding 
+        RAi configuration orientation for the 'l_gripper' frame.
+
+        Args:
+            orientation: A quaternion from PyBullet for the end-effector in [x, y, z, w] order.
+        
+        Returns:
+            A quaternion for the RAi configuration of l_gripper in [w, x, y, z] order.
+        """
+        # Create a Rotation object from the PyBullet quaternion (format: [x, y, z, w])
+        r_pb = R.from_quat(orientation)  
+        
+        # Define the transformation matrix T:
+        # This matrix swaps the x and y axes and flips the z axis.
+        T = np.array([[0, 1, 0],
+                    [1, 0, 0],
+                    [0, 0, -1]])
+            
+        # Create a rotation object from the transformation matrix
+        T_rot = R.from_matrix(T)
+
+        # Apply the stored relative rotation (r_rel was computed as: 
+        # r_rel = r_grip_ori * r_ee_ori.inv() to convert from ee orientation to l_gripper orientation)
+        r = T_rot * r_pb
+        
+        # Get the resulting quaternion in PyBullet convention ([x, y, z, w])
+        q = r.as_quat()
+
+        # Convert to RAi convention ([w, x, y, z])
+        q_rai = [q[3], q[0], q[1], q[2]]
+        
+        
+        return q_rai
+
+
+
+
 
     def compute_target_configuration(self, target_pos, target_ori):
         """
@@ -84,15 +163,19 @@ class IKSolver:
            position and orientation
         """
         # Convert target position and orientation to ry coordinate system
-        target_ori = [target_ori[3], target_ori[0], target_ori[1], target_ori[2]]
+        # target_ori = [target_ori[3], target_ori[0], target_ori[1], target_ori[2]]
+        target_ori = self.get_ry_ee_ori(target_ori)
         
         # Create a new frame for the debugging target
-        target_frame = self.C.addFrame('target_marker')
+        
+        target_frame = self.C.getFrame("target_marker")
+        if target_frame is None:
+            target_frame = self.C.addFrame('target_marker')
         target_frame.setShape(ry.ST.marker, [.4])  # Marker is visual only
         target_frame.setPosition(target_pos)
         target_frame.setQuaternion(target_ori)
         target_frame.setColor([0.0, 1.0, 0.0])  # Green marker
-
+        
         # Get current robot state
         joint_states = self.sim.robot.get_joint_positions()
 
@@ -103,10 +186,10 @@ class IKSolver:
         
         # # Get joint limits
         # j_lower, j_upper = self.sim.robot.get_joint_limits()
-
+        
         # Get Wall and base positions
-        wall_pos, wall_orn = p.getBasePositionAndOrientation(self.sim.wall)
-        wall_orn = [wall_orn[3], wall_orn[0], wall_orn[1], wall_orn[2]] # Convert to RAI quaternion
+        wall_pos, _ = p.getBasePositionAndOrientation(self.sim.wall)
+
 
         qHome = self.C.getJointState()
 
@@ -139,7 +222,7 @@ class IKSolver:
 
         # Set `l_gripper`'s orientation to `target_ori`
         # komo.addObjective([], ry.FS.quaternion, ['l_gripper'], ry.OT.eq, [1e1], target_ori)
-        komo.addObjective([], ry.FS.quaternion, ['l_gripper'], ry.OT.sos, [1e1], target_ori)
+        komo.addObjective([], ry.FS.quaternion, ['l_gripper'], ry.OT.sos, [1e2], target_ori)
 
         # Keep the end-effector above the table
         komo.addObjective([], ry.FS.distance, ['l_gripper', 'l_panda_base'], ry.OT.ineq, [1e1], [0.05])
@@ -149,7 +232,7 @@ class IKSolver:
         
         # komo.addObjective([], ry.FS.positionDiff, ['l_gripper'], ry.OT.ineq, np.diag([-1e1, 0, 0]), [wall_pos[0], 0 ,0 ])
         komo.addObjective([], ry.FS.position, ['l_gripper'], ry.OT.ineq, np.diag([-1e1, 0.0, 0.0]), [wall_pos[0]])
-        # komo.addObjective([], ry.FS.position, ['l_gripper'], ry.OT.sos, [1e1], [-0.6, None, None])
+        # komo.addObjective([], ry.FS.position, ['l_gripper'], ry.OT.sos, [-1e1], [-0.6, None, None])
         # komo.addObjective(
         #                     [],                  # time slice: apply everywhere or specify particular slices
         #                     ry.FS.positionDiff,  # feature: position difference
@@ -160,7 +243,7 @@ class IKSolver:
         #                 )
 
         # Solve for new joint positions & Target position
-        ret = ry.NLP_Solver(komo.nlp(), verbose=1 ) .solve()
+        ret = ry.NLP_Solver(komo.nlp(), verbose=0 ).solve()
         if ret.feasible:
             print('-- Solution is feasible!')
         else:
@@ -168,6 +251,9 @@ class IKSolver:
             return None
         
         q = komo.getPath()
+
+        # self.C.setJointState(q[0])
+        # self.C.view(True)
 
         return q[0]
 
