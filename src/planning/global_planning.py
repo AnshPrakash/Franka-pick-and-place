@@ -148,10 +148,10 @@ class Global_planner(IKSolver):
         print("Path found with", path.shape[0], "configurations.")
 
         # Visualize the planned path.
-        import time
-        for t in range(path.shape[0]):
-            self.C.setJointState(path[t])
-            self.C.view(False, f'Path slice {t}')
-            time.sleep(0.1)
-
+        # import time
+        # for t in range(path.shape[0]):
+        #     self.C.setJointState(path[t])
+        #     self.C.view(False, f'Path slice {t}')
+        #     time.sleep(0.1)
+        # print("Return Path", len(path))
         return path

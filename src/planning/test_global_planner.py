@@ -42,9 +42,20 @@ def run_exp(config: Dict[str, Any]):
             goal_pos = sim.goal.goal_pos
             goal_pos = [goal_pos[0] - 0.1, goal_pos[1] - 0.1, goal_pos[2] +0.5 ] 
             goal_ori = R.from_euler('xyz', [np.pi, 0, 0]).as_quat()
-            gp.plan(goal_pos, goal_ori)
+            path = gp.plan(goal_pos, goal_ori)
+            # print(path)
             for i in range(10000):
                 sim.step()
+                for q in path:
+
+                    # Update the robot joint positions in simulation (use appropriate API)
+                    sim.robot.position_control(q)
+                    # Optionally, update the configuration view if needed:
+                    # gp.C.setJointState(q)  # if you want to see the updated configuration in RAi viewer
+                    # Step the simulation for a few iterations for smooth execution.
+                    # too slow with this line
+                    # for _ in range(3):
+                    #     sim.step()
                 # for getting renders
                 # rgb, depth, seg = sim.get_ee_renders()
                 # rgb, depth, seg = sim.get_static_renders()
