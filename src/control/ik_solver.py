@@ -243,7 +243,7 @@ class IKSolver:
         #                 )
 
         # Solve for new joint positions & Target position
-        ret = ry.NLP_Solver(komo.nlp(), verbose=1 ).solve()
+        ret = ry.NLP_Solver(komo.nlp(), verbose=0 ).solve()
         if ret.feasible:
             print('-- Solution is feasible!')
         else:
