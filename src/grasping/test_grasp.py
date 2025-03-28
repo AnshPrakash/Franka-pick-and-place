@@ -13,6 +13,7 @@ from pybullet_object_models import ycb_objects  # type:ignore
 from src.simulation import Simulation
 from src.perception import Perception
 from src.control import IKSolver
+from src.grasping import ImplicitGrasper, SampleGrasper
 from src.utils import visualize_point_cloud, get_robot_view_matrix, get_pcd_from_numpy
 
 
@@ -27,11 +28,14 @@ def run_exp(config: Dict[str, Any]):
     # PERCEPTION: initialize Perception class and load all necessary label meshes/pointclouds (atfer env has been reset the first time)
     perception = Perception(camera_stats=config['world_settings']['camera'])
     obstacle_init = True
+    # GRASPING: initialize Grasper class
+    #grasper = ImplicitGrasper('../../GIGA/data/models/giga_pile.pt')
+    grasper = SampleGrasper()
 
-    for obj_name in obj_names[3:4]:
+    for obj_name in obj_names:
         # PERCEPTION
         target_init = True
-        for tstep in range(10):
+        for tstep in range(1):
             sim.reset(obj_name)
             # PERCEPTION: only init obstacles once and target after object switch
             if obstacle_init:
@@ -39,6 +43,7 @@ def run_exp(config: Dict[str, Any]):
                 obstacle_init = False
             if target_init:
                 perception.set_objects(sim.object.id)
+                grasper.get_object_data(sim.object.id)
                 target_init = False
             print((f"Object: {obj_name}, Timestep: {tstep},"
                    f" pose: {sim.get_ground_tuth_position_object}"))
@@ -57,14 +62,41 @@ def run_exp(config: Dict[str, Any]):
 
             inverse_kinematics = IKSolver(sim)
             perception.set_ik_solver(inverse_kinematics)
-            # PERCEPTION: get pointcloud for target object once before
+
+            # extract table height
+            # aabb_min, aabb_max = pybullet.getAABB(sim.table.id)
+            # print(aabb_min)
+            # print(aabb_max)
+            # # Convert to NumPy arrays for easier manipulation
+            # aabb_min = np.array(aabb_min)
+            # aabb_max = np.array(aabb_max)
+            #
+            # # Calculate dimensions: width (x-axis), depth (y-axis), height (z-axis)
+            # dimensions = aabb_max - aabb_min
+            # width, depth, height = dimensions
+            #
+            # print(f"Table Dimensions:\nWidth: {width}\nDepth: {depth}\nHeight: {height}")
 
             # ToDo: Check if initial skipping (due to falling object) is necessary
             for i in range(50): # 50
                 sim.step()
 
             target_object_pcd = perception.get_pcd(sim.object.id, sim, use_static=False, use_ee=True, use_tsdf=False)
-            target_object_pos, failure = perception.perceive(sim.object.id, target_object_pcd, visualize=True)
+            target_object_pos, failure = perception.perceive(sim.object.id, target_object_pcd, flatten=False, visualize=True)
+
+            grasps, scores = grasper.get_grasps(sim.object.id, target_object_pos, best=False, visualize=True, include_gt=True, ref_pc=target_object_pcd)
+            print(f"Grasps: {grasps}")
+            print(f"Scores: {scores}")
+
+            pos = target_object_pos[:3, 3]
+            ori = target_object_pos[:3, :3]
+            # convert rotation matrix to quaternion
+            from scipy.spatial.transform import Rotation as R
+            r = R.from_matrix(ori)
+            quat = r.as_quat()
+            target_object_pos = np.hstack([pos, quat])
+
+
 
             for i in range(10000):
                 sim.step()
@@ -77,7 +109,7 @@ def run_exp(config: Dict[str, Any]):
                 #     [perception.perceive(obj_id, obj_pcd, visualize=False)[0] for (obj_id, obj_pcd) in obstacle_pcds.items()])
                 # for obst in sim.obstacles:
                 #     visualize_point_cloud(np.asarray(perception.object_pcds[obst.id].points))
-                visualize_point_cloud(np.asarray(target_object_pcd.points))
+                #visualize_point_cloud(np.asarray(target_object_pcd.points))
 
                 obs_position_guess = np.zeros((2, 3))
                 print((f"[{i}] Obstacle Position-Diff: "
