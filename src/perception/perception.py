@@ -23,11 +23,11 @@ class Perception:
         self.retries = retries
 
         self.object_views = {
-            'top': {'pos': (0, -0.65, 1.9), 'ori': (np.pi, 0, 0)},
-            'right': {'pos': (0, -0.3, 1.9), 'ori': (7/8 * np.pi, 0, 0)}, # initially 3/4 * np.pi
-            'left': {'pos': (0, -0.9, 1.9), 'ori': (9/8 * np.pi, 0, 0)}, # initially 5/4 * np.pi
-            'front': {'pos': (0.4, -0.65, 1.9), 'ori': (7/8 * np.pi, 0, -np.pi / 2)}, # (0, -3/4 * np.pi, 0)
-            'back': {'pos': (-0.4, -0.65, 1.9), 'ori': (7/8 * np.pi, 0, np.pi / 2)}  # (0, 3/4 * np.pi, 0)
+            'top': {'pos': (0, -0.65, 1.72), 'ori': (np.pi, 0, 0)},
+            'right': {'pos': (0, -0.3, 1.72), 'ori': (7/8 * np.pi, 0, 0)}, # initially 3/4 * np.pi
+            'left': {'pos': (0, -0.9, 1.72), 'ori': (9/8 * np.pi, 0, 0)}, # initially 5/4 * np.pi
+            'front': {'pos': (0.4, -0.65, 1.72), 'ori': (7/8 * np.pi, 0, -np.pi / 2)}, # (0, -3/4 * np.pi, 0)
+            'back': {'pos': (-0.4, -0.65, 1.72), 'ori': (7/8 * np.pi, 0, np.pi / 2)}  # (0, 3/4 * np.pi, 0)
 
         }
 

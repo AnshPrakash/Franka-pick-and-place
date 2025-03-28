@@ -178,7 +178,7 @@ class ImplicitGrasper(Grasper):
             return grasps, scores
 
 class SampleGrasper(Grasper):
-    def __init__(self, obj_id=-1, num_grasps=15, max_num_samples=100, num_parallel_workers=5, finger_depth=0.05, table_height=1.255): # table height is hardcoded based on visualization
+    def __init__(self, obj_id=-1, num_grasps=15, max_num_samples=100, num_parallel_workers=5, finger_depth=0.05, table_height=1.2): # table height is hardcoded based on visualization
         super().__init__(obj_id)
         self.num_grasps = num_grasps
         self.max_num_samples = max_num_samples
@@ -200,8 +200,8 @@ class SampleGrasper(Grasper):
         pc = gt_mesh.sample_points_poisson_disk(number_of_points=10000, init_factor=5)
 
         grasps, grasps_pos, grasps_rot = self.sampler.sample_grasps_parallel(pc, num_parallel=self.num_parallel_workers,
-                                                                        num_grasps=self.num_grasps, max_num_samples=80,
-                                                                        safety_dis_above_table=self.table_height + 0.01,
+                                                                        num_grasps=self.num_grasps, max_num_samples=150,
+                                                                        safety_dis_above_table=self.table_height + self.finger_depth,
                                                                         show_final_grasps=False)
         if len(grasps) == 0:
             print("No grasps found")

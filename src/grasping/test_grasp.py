@@ -32,7 +32,7 @@ def run_exp(config: Dict[str, Any]):
     #grasper = ImplicitGrasper('../../GIGA/data/models/giga_pile.pt')
     grasper = SampleGrasper()
 
-    for obj_name in obj_names:
+    for obj_name in obj_names[1:2]:
         # PERCEPTION
         target_init = True
         for tstep in range(1):
@@ -64,18 +64,18 @@ def run_exp(config: Dict[str, Any]):
             perception.set_ik_solver(inverse_kinematics)
 
             # extract table height
-            # aabb_min, aabb_max = pybullet.getAABB(sim.table.id)
-            # print(aabb_min)
-            # print(aabb_max)
-            # # Convert to NumPy arrays for easier manipulation
-            # aabb_min = np.array(aabb_min)
-            # aabb_max = np.array(aabb_max)
-            #
-            # # Calculate dimensions: width (x-axis), depth (y-axis), height (z-axis)
-            # dimensions = aabb_max - aabb_min
-            # width, depth, height = dimensions
-            #
-            # print(f"Table Dimensions:\nWidth: {width}\nDepth: {depth}\nHeight: {height}")
+            aabb_min, aabb_max = pybullet.getAABB(sim.object.id)
+            print(aabb_min)
+            print(aabb_max)
+            # Convert to NumPy arrays for easier manipulation
+            aabb_min = np.array(aabb_min)
+            aabb_max = np.array(aabb_max)
+
+            # Calculate dimensions: width (x-axis), depth (y-axis), height (z-axis)
+            dimensions = aabb_max - aabb_min
+            width, depth, height = dimensions
+
+            print(f"Table Dimensions:\nWidth: {width}\nDepth: {depth}\nHeight: {height}")
 
             # ToDo: Check if initial skipping (due to falling object) is necessary
             for i in range(50): # 50
