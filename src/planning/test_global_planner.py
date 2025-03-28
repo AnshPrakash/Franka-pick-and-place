@@ -44,18 +44,27 @@ def run_exp(config: Dict[str, Any]):
             goal_ori = R.from_euler('xyz', [np.pi, 0, 0]).as_quat()
             path = gp.plan(goal_pos, goal_ori)
             # print(path)
+            replan_freq = 1
+            print("Initial Robot Config:", sim.robot.get_joint_positions())
             for i in range(10000):
                 sim.step()
-                for q in path:
+                if i%replan_freq == 0:
+                    print("Updated Robot Config:", sim.robot.get_joint_positions())
+                    path = gp.plan(goal_pos, goal_ori)
+                sim.robot.position_control(path[-1])
+                # for _ in range(100):
+                #     sim.step()
+                # print("Updated Robot Config:", sim.robot.get_joint_positions())
 
-                    # Update the robot joint positions in simulation (use appropriate API)
-                    sim.robot.position_control(q)
-                    # Optionally, update the configuration view if needed:
-                    # gp.C.setJointState(q)  # if you want to see the updated configuration in RAi viewer
-                    # Step the simulation for a few iterations for smooth execution.
-                    # too slow with this line
-                    # for _ in range(3):
-                    #     sim.step()
+                # for q in path:
+                #     # Update the robot joint positions in simulation (use appropriate API)
+                #     sim.robot.position_control(q)
+                #     # Optionally, update the configuration view if needed:
+                #     # gp.C.setJointState(q)  # if you want to see the updated configuration in RAi viewer
+                #     # Step the simulation for a few iterations for smooth execution.
+                #     # too slow with this line
+                #     for _ in range(3):
+                #         sim.step()
                 # for getting renders
                 # rgb, depth, seg = sim.get_ee_renders()
                 # rgb, depth, seg = sim.get_static_renders()

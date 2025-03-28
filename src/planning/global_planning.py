@@ -1,6 +1,4 @@
-import numpy as np
 import robotic as ry
-import pybullet as p
 
 from src.simulation import Simulation
 from src.control import IKSolver
@@ -51,7 +49,7 @@ class Global_planner(IKSolver):
             return None
 
         # 2. Get the current robot configuration (q0)
-        q0 = self.C.getJointState()
+        q0 = self.sim.robot.get_joint_positions()
         print("Start configuration (q0):", q0)
         print("Goal configuration (qT):", qT)
 
