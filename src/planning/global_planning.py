@@ -68,7 +68,7 @@ class Global_planner(IKSolver):
             # Use a sphere shape (not a marker) so it can be used for collision checking.
             obs.setShape(ry.ST.sphere, [radius])
             obs.setPosition(pos)
-            obs.setContact(1.0)
+            obs.setContact(1)
             obs.setColor([1.0, 0.0, 0.0])  # Red for obstacles.
             obstacle_names.append(obs_name)
 
