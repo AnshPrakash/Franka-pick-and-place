@@ -229,7 +229,8 @@ class IKSolver:
         komo.addObjective([], ry.FS.quaternion, ['l_gripper'], ry.OT.sos, [1e2], target_ori)
 
         # Keep the end-effector above the table
-        komo.addObjective([], ry.FS.distance, ['l_gripper', 'l_panda_base'], ry.OT.ineq, [1e1], [0.05])
+        komo.addObjective([], ry.FS.position, ['l_gripper'], ry.OT.ineq, np.diag([0.0, 0.0, -1e1]), [0,0, self.sim.robot.tscale * 0.6])
+        # komo.addObjective([], ry.FS.distance, ['l_gripper', 'l_panda_base'], ry.OT.ineq, [1e1], [0.05])
 
 
         # keep the end-effector away from the wall
