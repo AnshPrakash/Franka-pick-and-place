@@ -30,57 +30,6 @@ class Global_planner(IKSolver):
             obstacles.append((tracker.estimate_position(), tracker.object_size))
         return obstacles
 
-        
-    # def plan(self, target_pos, target_ori):
-    #     """
-    #     Compute a collision-free path to the target position using RRT-based planning.
-        
-    #     Args:
-    #         target_pos: The desired end-effector position.
-    #         target_ori: The desired end-effector orientation in PyBullet format.
-        
-    #     Returns:
-    #         path: A numpy array containing a sequence of joint configurations representing the planned path,
-    #             or None if planning fails.
-    #     """
-    #     # 1. Compute goal configuration using IK
-    #     qT = self.compute_target_configuration(target_pos, target_ori)
-    #     if qT is None:
-    #         print("IK failed to compute a goal configuration.")
-    #         return None
-
-    #     # 2. Get the current configuration
-    #     q0 = self.C.getJointState()
-    #     print("Start configuration (q0):", q0)
-    #     print("Goal configuration (qT):", qT)
-
-    #     # 3. Create an instance of the RRT_PathFinder
-    #     rrt = ry.RRT_PathFinder()
-    #     # Optionally, if needed, set the problem configuration
-    #     rrt.setProblem(self.C)
-
-    #     # 4. Set start and goal configurations
-    #     rrt.setStartGoal([q0], [qT])
-
-    #     # 5. Solve the planning problem
-    #     ret = rrt.solve()
-    #     if not ret.feasible:
-    #         print("Path planning returned an infeasible solution.")
-    #         return None
-
-    #     # 6. Retrieve the path; this method might return a resampled path
-    #     path = ret.x
-    #     print("Path found with", path.shape[0], "configurations.")
-
-    #     # 7. Optional: Visualize the planned path
-    #     import time
-    #     for t in range(path.shape[0]):
-    #         self.C.setJointState(path[t])
-    #         self.C.view(False, f'Path slice {t}')
-    #         time.sleep(0.1)
-
-    #     return path
-    
 
     def plan(self, target_pos, target_ori):
         """
@@ -119,6 +68,7 @@ class Global_planner(IKSolver):
             # Use a sphere shape (not a marker) so it can be used for collision checking.
             obs.setShape(ry.ST.sphere, [radius])
             obs.setPosition(pos)
+            obs.setContact(1.0)
             obs.setColor([1.0, 0.0, 0.0])  # Red for obstacles.
             obstacle_names.append(obs_name)
 
