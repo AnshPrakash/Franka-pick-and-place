@@ -23,11 +23,11 @@ class Perception:
         self.retries = retries
 
         self.object_views = {
-            'top': {'pos': (0, -0.65, 1.9), 'ori': (np.pi, 0, 0)},
-            'right': {'pos': (0, -0.3, 1.9), 'ori': (7/8 * np.pi, 0, 0)}, # initially 3/4 * np.pi
-            'left': {'pos': (0, -0.9, 1.9), 'ori': (9/8 * np.pi, 0, 0)}, # initially 5/4 * np.pi
-            'front': {'pos': (0.3, -0.65, 1.9), 'ori': (3/4 * np.pi, 0, -np.pi / 2)}, # (0, -3/4 * np.pi, 0)
-            'back': {'pos': (-0.3, -0.65, 1.9), 'ori': (3 / 4 * np.pi, 0, np.pi / 2)}  # (0, 3/4 * np.pi, 0)
+            'top': {'pos': (0, -0.65, 1.72), 'ori': (np.pi, 0, 0)},
+            'right': {'pos': (0, -0.3, 1.72), 'ori': (7/8 * np.pi, 0, 0)}, # initially 3/4 * np.pi
+            'left': {'pos': (0, -0.9, 1.72), 'ori': (9/8 * np.pi, 0, 0)}, # initially 5/4 * np.pi
+            'front': {'pos': (0.4, -0.65, 1.72), 'ori': (7/8 * np.pi, 0, -np.pi / 2)}, # (0, -3/4 * np.pi, 0)
+            'back': {'pos': (-0.4, -0.65, 1.72), 'ori': (7/8 * np.pi, 0, np.pi / 2)}  # (0, 3/4 * np.pi, 0)
 
         }
 
@@ -68,6 +68,7 @@ class Perception:
             pcd = mesh.sample_points_poisson_disk(number_of_points=nb_points, init_factor=5)
             #pcd = mesh.sample_points_uniformly(nb_points)
             self.object_pcds[obj_id] = pcd
+
 
     def preprocess_point_cloud(self, pcd):
         pcd_down = pcd.voxel_down_sample(self.voxel_size)

@@ -1,2 +1,2 @@
-from control.ik_solver import IKSolver
+from src.control.ik_solver import IKSolver
 
