@@ -38,6 +38,7 @@ class IKSolver:
 
         world = self.C.getFrame("world")
         world.setShape(ry.ST.marker, [0.6])
+        world.setContact(0)
 
 
         # Convert PyBullet quaternion [x, y, z, w] → RAI quaternion [w, x, y, z]
@@ -58,12 +59,14 @@ class IKSolver:
         tray.setPosition(tray_pos)  
         tray.setQuaternion(tray_ori)
         tray.setShape(ry.ST.marker, [0.6])
+        tray.setContact(0)
 
         # Create the table frame
         table = self.C.getFrame("table")
         table.setShape(ry.ST.ssBox, [2.5, 2.5, 0.05, 0.01])  # Full size, with corner radius
         table.setColor([0.2])  # Grey color
         table.setShape(ry.ST.marker, [1.4])
+        table.setContact(0)
 
 
         table_pos = [table_pos[0], table_pos[1], self.sim.robot.tscale * 0.6] # 0.6 table height came from urdf file
@@ -87,6 +90,7 @@ class IKSolver:
         wall.setPosition(wall_pos)
         wall.setQuaternion(wall_ori)
         wall.setColor([0.5, 0.5, 0.5])
+        wall.setContact(0)
     
 
         # #DEBUG
@@ -225,7 +229,8 @@ class IKSolver:
         komo.addObjective([], ry.FS.quaternion, ['l_gripper'], ry.OT.sos, [1e2], target_ori)
 
         # Keep the end-effector above the table
-        komo.addObjective([], ry.FS.distance, ['l_gripper', 'l_panda_base'], ry.OT.ineq, [1e1], [0.05])
+        komo.addObjective([], ry.FS.position, ['l_gripper'], ry.OT.ineq, np.diag([0.0, 0.0, -1e1]), [0,0, self.sim.robot.tscale * 0.6])
+        # komo.addObjective([], ry.FS.distance, ['l_gripper', 'l_panda_base'], ry.OT.ineq, [1e1], [0.05])
 
 
         # keep the end-effector away from the wall
@@ -252,8 +257,6 @@ class IKSolver:
         
         q = komo.getPath()
 
-        # self.C.setJointState(q[0])
-        # self.C.view(True)
 
         return q[0]
 

@@ -3,13 +3,14 @@ import glob
 import yaml
 
 import numpy as np
+from scipy.spatial.transform import Rotation as R
 
 from typing import Dict, Any
 
 from pybullet_object_models import ycb_objects  # type:ignore
 
 from src.simulation import Simulation
-from src.tracking import Track
+from src.planning import Global_planner
 
 
 def run_exp(config: Dict[str, Any]):
@@ -37,15 +38,47 @@ def run_exp(config: Dict[str, Any]):
             ee_pos, ee_ori = sim.robot.get_ee_pose()
             print(f"Robot End Effector Position: {ee_pos}")
             print(f"Robot End Effector Orientation: {ee_ori}")
-            # Track obstacle 1
-
-            track_obs1 = Track(sim.obstacles[0].id,sim)
-            for i in range(10000):
-                obstacle_pos = sim.obstacles[0]._get_pos()
-                print(f"[{i}] Obstacle 1 Pos: {obstacle_pos}")
-                object_estimated_pos = track_obs1.estimate_position()
-                print(f"[{i}] Obstacle 1 Estimated Pos: {object_estimated_pos}")
+            gp = Global_planner(sim)
+            goal_pos = sim.goal.goal_pos
+            goal_pos = [goal_pos[0] - 0.1, goal_pos[1] - 0.1, goal_pos[2] +0.5 ] 
+            goal_ori = R.from_euler('xyz', [np.pi, 0, 0]).as_quat()
+            path = gp.plan(goal_pos, goal_ori)
+            # print(path)
+            replan_freq = 10
+            init_config = sim.robot.get_joint_positions()
+            print("Initial Robot Config:", init_config)
+            if len(path) > 10:
+                q = path[10]
+            else:
+                q = path[1]
+            sim.robot.position_control(q)
+            for i in range(10000):    
                 sim.step()
+                if i%replan_freq == 0:
+                    print("Initial Config: ", init_config)
+                    print("Updated Robot Config:", sim.robot.get_joint_positions())
+                    path = gp.plan(goal_pos, goal_ori)
+                # sim.robot.position_control(path[-1])
+                # for _ in range(100):
+                #     sim.step()
+                # print("Updated Robot Config:", sim.robot.get_joint_positions())
+                    if len(path) > 10:
+                        q = path[10]
+                    else:
+                        q = path[1]
+                    
+                    sim.robot.position_control(q)
+                    for _ in range(2):
+                        sim.step()
+                # for q in path:
+                #     # Update the robot joint positions in simulation (use appropriate API)
+                #     sim.robot.position_control(q)
+                #     # Optionally, update the configuration view if needed:
+                #     # gp.C.setJointState(q)  # if you want to see the updated configuration in RAi viewer
+                #     # Step the simulation for a few iterations for smooth execution.
+                #     # too slow with this line
+                #     for _ in range(10):
+                #         sim.step()
                 # for getting renders
                 # rgb, depth, seg = sim.get_ee_renders()
                 # rgb, depth, seg = sim.get_static_renders()
