@@ -5,6 +5,7 @@
 - pip install -r GIGA/requirements.txt
 - cd GIGA && pip install -e .
 
+- Note, cloning not needed, because GIGA already in repository
 # Comments
 - might also push whole GIGA repository as changes to some source files
 - cause were deprecated numpy syntax (np.bool, np.int) but other packages require newer versions
