@@ -14,7 +14,6 @@ conda env create --name irobman -f environment.yml
 conda activate irobman
 git clone https://github.com/eleramp/pybullet-object-models.git # inside the irobman_project folder
 pip install -e pybullet-object-models/
-git clone -b ipynb https://github.com/iROSA-lab/GIGA.git # from here on additional grasping dependencies
 pip install torch==2.1.0 torchvision==0.16.0 torch-scatter==2.1.2 -f https://data.pyg.org/whl/torch-2.1.0+cu121.html # 11.8 wheels as in repo will lead to conflicts
 pip install -r GIGA/requirements.txt
 cd GIGA && pip install -e .
