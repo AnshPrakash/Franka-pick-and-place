@@ -21,7 +21,7 @@ def run_exp(config: Dict[str, Any]):
     object_root_path = ycb_objects.getDataPath()
     files = glob.glob(os.path.join(object_root_path, "Ycb*"))
     obj_names = [file.split('/')[-1] for file in files]
-    sim = Simulation(config)
+    sim = Simulation(config, seed=13287)
     for obj_name in obj_names:
         for tstep in range(10):
             sim.reset(obj_name)

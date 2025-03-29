@@ -25,7 +25,7 @@ class MoveIt:
             False: if goal pose is not possible according to control module
         """
         
-        replan_freq = 5 # hyperparameter
+        replan_freq = 1 # hyperparameter
         MAX_ITER = 200
         epsilon = 0.05
         gp = self.planner
@@ -42,7 +42,7 @@ class MoveIt:
         for i in range(MAX_ITER):
             if i%replan_freq == 0:
                 path = gp.plan(goal_position, goal_ori)
-                skip_to_config = 5 # hyperparameter
+                skip_to_config = 10 # hyperparameter >= 1 [0 implies current congifuration]
                 if len(path) > skip_to_config:
                     q = path[skip_to_config]
                 else:
@@ -65,9 +65,9 @@ class MoveIt:
                 delta_config = np.abs(robot_joint_config - last_configuration)
                 last_configuration = robot_joint_config
                 # print("Change in config",  delta_config )
-                if (np.max(delta_config) < epsilon):
-                    print(f"Configuration Achieved: No big change in joint configuration in last {check_new_config_freq} steps")
-                    break
+                # if (np.max(delta_config) < epsilon):
+                #     print(f"Configuration Achieved: No big change in joint configuration in last {check_new_config_freq} steps")
+                #     break
             # print("================")
 
         return True
