@@ -64,10 +64,10 @@ class MoveIt:
             if i !=0 and i%check_new_config_freq == 0:
                 delta_config = np.abs(robot_joint_config - last_configuration)
                 last_configuration = robot_joint_config
-                # print("Change in config",  delta_config )
-                # if (np.max(delta_config) < epsilon):
-                #     print(f"Configuration Achieved: No big change in joint configuration in last {check_new_config_freq} steps")
-                #     break
+                print("Change in config",  delta_config )
+                if (np.max(delta_config) < epsilon):
+                    print(f"Configuration Achieved: No big change in joint configuration in last {check_new_config_freq} steps")
+                    break
             # print("================")
 
         return True
