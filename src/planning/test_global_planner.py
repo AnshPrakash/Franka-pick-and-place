@@ -44,18 +44,32 @@ def run_exp(config: Dict[str, Any]):
             goal_ori = R.from_euler('xyz', [np.pi, 0, 0]).as_quat()
             path = gp.plan(goal_pos, goal_ori)
             # print(path)
-            replan_freq = 1
-            print("Initial Robot Config:", sim.robot.get_joint_positions())
-            for i in range(10000):
+            replan_freq = 10
+            init_config = sim.robot.get_joint_positions()
+            print("Initial Robot Config:", init_config)
+            if len(path) > 10:
+                q = path[10]
+            else:
+                q = path[1]
+            sim.robot.position_control(q)
+            for i in range(10000):    
                 sim.step()
                 if i%replan_freq == 0:
+                    print("Initial Config: ", init_config)
                     print("Updated Robot Config:", sim.robot.get_joint_positions())
                     path = gp.plan(goal_pos, goal_ori)
-                sim.robot.position_control(path[-1])
+                # sim.robot.position_control(path[-1])
                 # for _ in range(100):
                 #     sim.step()
                 # print("Updated Robot Config:", sim.robot.get_joint_positions())
-
+                    if len(path) > 10:
+                        q = path[10]
+                    else:
+                        q = path[1]
+                    
+                    sim.robot.position_control(q)
+                    for _ in range(2):
+                        sim.step()
                 # for q in path:
                 #     # Update the robot joint positions in simulation (use appropriate API)
                 #     sim.robot.position_control(q)
@@ -63,18 +77,18 @@ def run_exp(config: Dict[str, Any]):
                 #     # gp.C.setJointState(q)  # if you want to see the updated configuration in RAi viewer
                 #     # Step the simulation for a few iterations for smooth execution.
                 #     # too slow with this line
-                #     for _ in range(3):
+                #     for _ in range(10):
                 #         sim.step()
                 # for getting renders
                 # rgb, depth, seg = sim.get_ee_renders()
                 # rgb, depth, seg = sim.get_static_renders()
-                obs_position_guess = np.zeros((2, 3))
-                print((f"[{i}] Obstacle Position-Diff: "
-                       f"{sim.check_obstacle_position(obs_position_guess)}"))
-                goal_guess = np.zeros((7,))
-                print((f"[{i}] Goal Obj Pos-Diff: "
-                       f"{sim.check_goal_obj_pos(goal_guess)}"))
-                print(f"[{i}] Goal Satisfied: {sim.check_goal()}")
+                # obs_position_guess = np.zeros((2, 3))
+                # print((f"[{i}] Obstacle Position-Diff: "
+                #        f"{sim.check_obstacle_position(obs_position_guess)}"))
+                # goal_guess = np.zeros((7,))
+                # print((f"[{i}] Goal Obj Pos-Diff: "
+                #        f"{sim.check_goal_obj_pos(goal_guess)}"))
+                # print(f"[{i}] Goal Satisfied: {sim.check_goal()}")
     sim.close()
 
 

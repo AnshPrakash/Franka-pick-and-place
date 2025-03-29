@@ -32,7 +32,10 @@ class Track:
         x,y,z = 0,0,0
         if measurement is not None:
             x, y, z = measurement[0], measurement[1], measurement[2]
-        
+        else:
+            # No Clue where the object is in this case
+            # Assume it is not close to the Robot
+            measurement = np.array([0,0,0])
         self.prev_position = measurement
         # Initialize Kalman Filter for the object
         self.kf_obstacle = self.obstacle_kf( x = x, y = y, z = z,
@@ -72,8 +75,8 @@ class Track:
 
         # Compute the radius
         radius = np.sqrt(np.sum(center**2) - D)
-        print("Estimated center:", center)
-        print("Estimated radius:", radius)  
+        # print("Estimated center:", center)
+        # print("Estimated radius:", radius)  
 
         return center
 
@@ -86,12 +89,13 @@ class Track:
         # Single view of the object
 
         measurement = self.measure()
-        if (measurement is None):
+        if measurement is None:
             measurement = self.prev_position
         
         kf_obstacle = self.kf_obstacle
 
         # In your simulation loop, suppose you obtain a rough measurement (x_meas, y_meas, z_meas):
+
         x_meas, y_meas, z_meas = measurement
 
         z_measure = np.array([[x_meas], [y_meas], [z_meas]])
@@ -105,8 +109,10 @@ class Track:
         # The updated state can now be used as your best estimate
         estimated_state = kf_obstacle.x
         estimated_postion = estimated_state[[0, 2, 4]].flatten()
-        print("Estimated Position with Kalman Filter:", estimated_postion)
+        # print("Estimated Position with Kalman Filter:", estimated_postion)
         self.prev_position = estimated_postion
+        print("Measurement ", measurement)
+        print("Estimated postion", estimated_postion)
         return estimated_postion
 
     
