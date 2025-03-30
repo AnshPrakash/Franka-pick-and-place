@@ -17,6 +17,9 @@ class IKSolver:
         C.addFile(ry.raiPath('scenarios/panda_irobman.g'))
 
         self.C = C
+
+
+
         
         self._configure_ry()
         
@@ -146,8 +149,8 @@ class IKSolver:
 
         # Apply the stored relative rotation (r_rel was computed as: 
         # r_rel = r_grip_ori * r_ee_ori.inv() to convert from ee orientation to l_gripper orientation)
-        r = T_rot * r_pb
-        
+        # Note: multiple T_rot after r_pb because its relative to the local frame
+        r = r_pb * T_rot
         # Get the resulting quaternion in PyBullet convention ([x, y, z, w])
         q = r.as_quat()
 
@@ -167,7 +170,7 @@ class IKSolver:
            position and orientation
         """
         # Convert target position and orientation to ry coordinate system
-        # target_ori = [target_ori[3], target_ori[0], target_ori[1], target_ori[2]]
+
         target_ori = self.get_ry_ee_ori(target_ori)
         
         # Create a new frame for the debugging target
@@ -179,7 +182,7 @@ class IKSolver:
         target_frame.setPosition(target_pos)
         target_frame.setQuaternion(target_ori)
         target_frame.setColor([0.0, 1.0, 0.0])  # Green marker
-        
+
         # Get current robot state
         joint_states = self.sim.robot.get_joint_positions()
 
@@ -196,6 +199,8 @@ class IKSolver:
 
 
         qHome = self.C.getJointState()
+
+        # self.C.view(True)
 
         # Initialize KOMO solver
 
@@ -225,7 +230,7 @@ class IKSolver:
         komo.addObjective([], ry.FS.position, ['l_gripper'], ry.OT.eq, [1e1], target_pos)
 
         # Set `l_gripper`'s orientation to `target_ori`
-        # komo.addObjective([], ry.FS.quaternion, ['l_gripper'], ry.OT.eq, [1e1], target_ori)
+        #komo.addObjective([], ry.FS.quaternion, ['l_gripper'], ry.OT.eq, [1e1], target_ori)
         komo.addObjective([], ry.FS.quaternion, ['l_gripper'], ry.OT.sos, [1e2], target_ori)
 
         # Keep the end-effector above the table
@@ -256,6 +261,10 @@ class IKSolver:
             return None
         
         q = komo.getPath()
+
+        # # DEBUGGING
+        # self.C.setJointState(q[0])
+        # self.C.view(True)
 
 
         return q[0]

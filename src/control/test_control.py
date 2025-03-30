@@ -12,7 +12,7 @@ from pybullet_object_models import ycb_objects  # type:ignore
 from src.simulation import Simulation
 
 import pybullet as p
-from control import IKSolver
+from src.control import IKSolver
 
 def run_exp(config: Dict[str, Any]):
     # Example Experiment Runner File
@@ -46,12 +46,40 @@ def run_exp(config: Dict[str, Any]):
             # target_pos = np.array([-0.05018395, -0.46971428,  1.4 ])
             # q = inverse_kinematics.compute_target_configuration(target_pos, target_ori)
             object_views = {
-                'test': {'pos': [0.0, -0.3, 1.18], 'ori':[np.pi, 0, 0]},
-                # 'top': {'pos': [0, -0.60, 1.5], 'ori':[np.pi, 0, 0]},
-                # 'right': {'pos': [0, -0.3, 1.5], 'ori': [7/8 * np.pi, 0, 0]},
-                # 'left': {'pos': [0, -0.6, 1.5], 'ori': [9/8 * np.pi, 0, 0]}, # initially 5/4 * np.pi
-                # 'front': {'pos': [0.3, -0.60, 1.5], 'ori': [3/4 * np.pi, 0, -np.pi / 2]}, # [0, -3/4 * np.pi, 0]
-                # 'back': {'pos': [-0.3, -0.60, 1.5], 'ori': [3/4 * np.pi, 0, np.pi / 2]} # (0, 3/4 * np.pi, 0]
+                #'test': {'pos': [0.0, -0.3, 1.18], 'ori':[np.pi, 0, 0]},
+                'top': {'pos': [0, -0.60, 1.5], 'ori':[np.pi, 0, 0]},
+                'right': {'pos': [0, -0.3, 1.5], 'ori': [7/8 * np.pi, 0, 0]},
+                'left': {'pos': [0, -0.6, 1.5], 'ori': [9/8 * np.pi, 0, 0]}, # initially 5/4 * np.pi
+                'front': {'pos': [0.3, -0.60, 1.5], 'ori': [3/4 * np.pi, 0, -np.pi / 2]}, # [0, -3/4 * np.pi, 0]
+                'back': {'pos': [-0.3, -0.60, 1.5], 'ori': [3/4 * np.pi, 0, np.pi / 2]} # (0, 3/4 * np.pi, 0]
+
+                # 'top': {'pos': (0, -0.6, 1.8), 'ori': (np.pi, 0, 0)},
+                # 'right': {'pos': (0, -0.3, 1.72), 'ori': (7/8 * np.pi, 0, 0)}, # initially 3/4 * np.pi
+                # 'front': {'pos': (0.4, -0.6, 1.72), 'ori': (7 / 8 * np.pi, 0, -np.pi / 2)},  # (0, -3/4 * np.pi, 0)
+                # 'left': {'pos': (0, -0.9, 1.72), 'ori': (9/8 * np.pi, 0, 0)}, # initially 5/4 * np.pi
+                # # 'back': {'pos': (-0.4, -0.6, 1.72), 'ori': (7/8 * np.pi, 0, np.pi / 2)}  # (0, 3/4 * np.pi, 0)
+
+                # #'top': {'pos': (0, -0.6, 1.8), 'ori': (np.pi, 0, 0)},
+                # #'right': {'pos': (0, -0.4, 1.7), 'ori': (7 / 8 * np.pi, 0, 0)},  # initially 3/4 * np.pi
+                # 'front': {'pos': (0.2, -0.4, 1.7), 'ori': (7 / 8 * np.pi, 0, -1)},  # (7 / 8 * np.pi, 0, -np.pi / 2)
+                # 'left': {'pos': (0, -0.5, 1.7), 'ori': (-7 / 8 * np.pi, 0, 0)},  # initially 5/4 * np.pi
+                # # 'back': {'pos': (-0.3, -0.55, 1.7), 'ori': (7/8 * np.pi, 0, np.pi / 2)}  # (0, 3/4 * np.pi, 0)
+
+                #'top': {'pos': (0, -0.6, 1.8), 'ori': (np.pi, 0, 0)},
+                # 'top': {'pos': (0.04, -0.55, 1.66), 'ori': (3.06, 0.01, -0.18)},
+
+                # 'right': {'pos': (0, -0.4, 1.7), 'ori': (7 / 8 * np.pi, 0, 0)},  # initially 3/4 * np.pi
+
+                # 'front': {'pos': (0.2, -0.4, 1.7), 'ori': (7 / 8 * np.pi, np.pi/4, 0)},  # (7 / 8 * np.pi, 0, -np.pi / 2)
+                # 'front': {'pos': (0.15, -0.39, 1.7), 'ori': (2.84, 0.63, -0.1)},  # (7 / 8 * np.pi, 0, -np.pi / 2)
+
+                #'left0': {'pos': (0, -0.7, 1.6), 'ori': (0, 0, 0)},
+                #'left': {'pos': (0, -0.7, 1.6), 'ori': (np.pi, 0, 0)},  # initially 5/4 * np.pi
+                #'left3': {'pos': (0, -0.7, 1.6), 'ori': (1 / 2 * np.pi, 0, 0)},
+                #'left2': {'pos': (0, -0.58, 1.5), 'ori': (-2.83, 0.14, -0.01)},
+
+                #'back': {'pos': (-0.2, -0.4, 1.7), 'ori': (7/8 * np.pi, 0, np.pi/2)}  # (0, 3/4 * np.pi, 0)
+                #'back': {'pos': (-0.15, -0.39, 1.7), 'ori': (2.84, -0.63, -0.1)}
             }
             
             for key,item in object_views.items():
