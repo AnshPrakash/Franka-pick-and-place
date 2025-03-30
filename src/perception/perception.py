@@ -10,7 +10,7 @@ from src.utils import get_pcd_from_numpy, get_robot_view_matrix
 import pybullet as p
 
 class Perception:
-    def __init__(self, voxel_size=0.005, retries=42, initial_translation=True,
+    def __init__(self, voxel_size=0.004, retries=42, initial_translation=True,
                  camera_stats=None): # extra parameters for TSDF method
         self.object_meshs = {}
         self.object_pcds = {}
@@ -23,20 +23,40 @@ class Perception:
         self.retries = retries
 
         self.object_views = {
-            'top': {'pos': (0, -0.65, 1.72), 'ori': (np.pi, 0, 0)},
-            'right': {'pos': (0, -0.3, 1.72), 'ori': (7/8 * np.pi, 0, 0)}, # initially 3/4 * np.pi
-            'left': {'pos': (0, -0.9, 1.72), 'ori': (9/8 * np.pi, 0, 0)}, # initially 5/4 * np.pi
-            'front': {'pos': (0.4, -0.65, 1.72), 'ori': (7/8 * np.pi, 0, -np.pi / 2)}, # (0, -3/4 * np.pi, 0)
-            'back': {'pos': (-0.4, -0.65, 1.72), 'ori': (7/8 * np.pi, 0, np.pi / 2)}  # (0, 3/4 * np.pi, 0)
+            # 'top': {'pos': (0, -0.6, 1.8), 'ori': (np.pi, 0, 0)},
+            # 'right': {'pos': (0, -0.3, 1.72), 'ori': (7/8 * np.pi, 0, 0)}, # initially 3/4 * np.pi
+            # 'front': {'pos': (0.4, -0.6, 1.72), 'ori': (7 / 8 * np.pi, 0, -np.pi / 2)},  # (0, -3/4 * np.pi, 0)
+            # 'left': {'pos': (0, -0.9, 1.72), 'ori': (9/8 * np.pi, 0, 0)}, # initially 5/4 * np.pi
+            # # 'back': {'pos': (-0.4, -0.6, 1.72), 'ori': (7/8 * np.pi, 0, np.pi / 2)}  # (0, 3/4 * np.pi, 0)
+
+            # #'top': {'pos': (0, -0.6, 1.8), 'ori': (np.pi, 0, 0)},
+            # #'right': {'pos': (0, -0.4, 1.7), 'ori': (7 / 8 * np.pi, 0, 0)},  # initially 3/4 * np.pi
+            # 'front': {'pos': (0.2, -0.4, 1.7), 'ori': (7 / 8 * np.pi, 0, -1)},  # (7 / 8 * np.pi, 0, -np.pi / 2)
+            # 'left': {'pos': (0, -0.5, 1.7), 'ori': (-7 / 8 * np.pi, 0, 0)},  # initially 5/4 * np.pi
+            # # 'back': {'pos': (-0.3, -0.55, 1.7), 'ori': (7/8 * np.pi, 0, np.pi / 2)}  # (0, 3/4 * np.pi, 0)
+
+            'top': {'pos': (0, -0.6, 1.8), 'ori': (np.pi, 0, 0)},
+            #'top': {'pos': (0.04, -0.55, 1.66), 'ori': (3.06, 0.01, -0.18)},
+
+            #'right': {'pos': (0, -0.4, 1.7), 'ori': (7 / 8 * np.pi, 0, 0)},  # initially 3/4 * np.pi
+
+            #'front': {'pos': (0.2, -0.4, 1.7), 'ori': (7 / 8 * np.pi, np.pi/4, 0)},  # (7 / 8 * np.pi, 0, -np.pi / 2)
+            #'front': {'pos': (0.15, -0.39, 1.7), 'ori': (2.84, 0.63, -0.1)},  # (7 / 8 * np.pi, 0, -np.pi / 2)
+
+            #'left': {'pos': (0, -0.7, 1.5), 'ori': (9/8 * np.pi, 0, 0)},  # initially 5/4 * np.pi
+            'left': {'pos': (0, -0.58, 1.5), 'ori': (-2.83, 0.14, -0.01)},
+
+            #'back': {'pos': (-0.2, -0.4, 1.7), 'ori': (7/8 * np.pi, -np.pi/4, 0)}  # (0, 3/4 * np.pi, 0)
+            'back': {'pos': (-0.15, -0.39, 1.7), 'ori': (2.84, -0.63, -0.1)}
 
         }
 
-        self.ik_solver = None
+        self.motion_controller = None
 
         self.camera_stats = camera_stats
 
-    def set_ik_solver(self, ik_solver):
-        self.ik_solver = ik_solver
+    def set_controller(self, controller):
+        self.motion_controller = controller
 
     def set_objects(self, object_ids, nb_points=10000):
         if not isinstance(object_ids, list):
@@ -146,8 +166,13 @@ class Perception:
         # try 1 time with point to point
         if failure:
             for i in range(5): # also 5 tries to be safe, but usually only 1 try needed
-                result_global = self.global_registration(source_down, target_down, source_fpfh, target_fpfh)
-                result_final = self.local_registration(pcd_source, pcd_target, result_global.transformation, point_to_plane=False)
+                try:
+                    result_global = self.global_registration(source_down, target_down, source_fpfh, target_fpfh)
+                    result_final = self.local_registration(pcd_source, pcd_target, result_global.transformation, point_to_plane=False)
+                except:
+                    print(f"Registration failed during PointToPoint due to exception...")
+                    continue
+
                 if result_final.fitness != 0:
                     print(f"Registration successful with PointToPoint...")
                     failure = False
@@ -246,32 +271,38 @@ class Perception:
                 target_ori = R.from_euler('xyz', view_params['ori']).as_quat()
 
                 # move robot ee to desired positions
-                # ToDo: change with own IK solver!
-                #q = self.ik_solver.compute_target_configuration(target_pos, target_ori)
-                q = p.calculateInverseKinematics(sim.robot.id, sim.robot.ee_idx, target_pos, target_ori)[:-2]
-                # if solution is not found /infeasible just skip
-                if q is None:
-                    print("View skipped due to infeasible IK solution...")
-                    continue
-                sim.robot.position_control(q)
-                sim.step()
-                last_pos, last_ori = target_pos, target_ori
-                curr_pos, curr_ori = sim.robot.get_ee_pose()
-                # adjust ee until position and orientation change below some threshold
-                while (np.linalg.norm(curr_pos - last_pos) > change_threshold or
-                       np.linalg.norm(curr_ori - last_ori) > change_threshold):
-                    sim.robot.position_control(q)
-                    sim.step()
-                    last_pos, last_ori = curr_pos, curr_ori
-                    curr_pos, curr_ori = sim.robot.get_ee_pose()
-                    # print(f"View {view}, Pos change:", np.linalg.norm(curr_pos - last_pos))
-                    # print(f"View {view}, Ori change:", np.linalg.norm(curr_ori - last_ori))
+                print(f"View {view}, Target Pos: {target_pos}")
+                print("______________________________________________\n\n\n\n")
+                self.motion_controller.moveTo(target_pos, target_ori)
+                # q = p.calculateInverseKinematics(sim.robot.id, sim.robot.ee_idx, target_pos, target_ori)[:-2]
+                # # if solution is not found /infeasible just skip
+                # if q is None:
+                #     print("View skipped due to infeasible IK solution...")
+                #     continue
+                # sim.robot.position_control(q)
+                # sim.step()
+                # last_pos, last_ori = target_pos, target_ori
+                # curr_pos, curr_ori = sim.robot.get_ee_pose()
+                # # adjust ee until position and orientation change below some threshold
+                # while (np.linalg.norm(curr_pos - last_pos) > change_threshold or
+                #        np.linalg.norm(curr_ori - last_ori) > change_threshold):
+                #     sim.robot.position_control(q)
+                #     sim.step()
+                #     last_pos, last_ori = curr_pos, curr_ori
+                #     curr_pos, curr_ori = sim.robot.get_ee_pose()
+                #     # print(f"View {view}, Pos change:", np.linalg.norm(curr_pos - last_pos))
+                #     # print(f"View {view}, Ori change:", np.linalg.norm(curr_ori - last_ori))
                 print(f"View {view}, Final Pos error:", np.linalg.norm(sim.robot.get_ee_pose()[0] - target_pos))
                 print(f"View {view}, Final Ori error", np.linalg.norm(sim.robot.get_ee_pose()[1] - target_ori))
 
                 # get the new depth image and add pointcloud
                 rgb, depth, seg = sim.get_ee_renders()
                 pos, ori = sim.robot.get_ee_pose()
+                # import time
+                # time.sleep(10)
+
+                print(f"View {view}, Robot End Effector Position: {pos}")
+                print(f"View {view}, Robot End Effector Orientation: {R.from_quat(ori).as_euler('xyz')}")
 
                 # append current scene information
                 scene_data.append({'color': rgb, 'depth': depth, 'view_matrix': get_robot_view_matrix(pos, ori), 'seg': seg})
@@ -297,19 +328,70 @@ class Perception:
                     ee_pcd_object.estimate_normals()
                     ee_pcds.append((len(ee_pcd_object.points), ee_pcd_object))
                 # align pointclouds
-                ee_pcds.sort(key=lambda x: x[0], reverse=True)
-                reference_pcd = ee_pcds[0][1] # point cloud with most points is reference
+
+                # # This code was for building the reference pointcloud sequentially
+                # max_index, max_entry = max(enumerate(ee_pcds), key=lambda p: p[1][0]) # get max entry sorted by number of points in pcd
+                # combined_pcd = max_entry[1].points
+                # # construct view ordering (assuming that views are stored in order)
+                # nb_views = len(ee_pcds)
+                # if max_index == 0:
+                #     # if first view is top just go in order
+                #     view_order = list(range(nb_views))
+                # else:
+                #     # else, go in a circle and use top as last view
+                #     view_order = list(range(max_index, nb_views)) + list(range(1, max_index)) + [0]
+                # for i in view_order[1:]: # skip first view as it is already added
+                #     nb_points, pcd = ee_pcds[i]
+                #     if nb_points > 0:
+                #         # current pcd is source as we want to transform it to the reference
+                #         reference_pcd = get_pcd_from_numpy(combined_pcd)
+                #         trans, failure = self.perceive(pcd, reference_pcd, flatten=False, visualize=True)
+                #         if failure:
+                #             continue
+                #         pcd.transform(trans)
+                #     # instead of combining later just enrich reference pcd each iteration
+                #     combined_pcd = np.vstack([combined_pcd, pcd.points])
+                # pcd_collections.append(combined_pcd)
+
+                max_index, max_entry = max(enumerate(ee_pcds),
+                                           key=lambda p: p[1][0])  # get max entry sorted by number of points in pcd
+                reference_pcd = max_entry[1]
                 pcd_collections.append(reference_pcd.points)
-                for nb_points, pcd in ee_pcds[1:]:
+                # construct view ordering (assuming that views are stored in order)
+                nb_views = len(ee_pcds)
+                if max_index == 0:
+                    # if first view is top just go in order
+                    view_order = list(range(nb_views))
+                else:
+                    # else, go in a circle and use top as last view
+                    view_order = list(range(max_index, nb_views)) + list(range(1, max_index)) + [0]
+                for i in view_order[1:]:  # skip first view as it is already added
+                    print(i)
+                    nb_points, pcd = ee_pcds[i]
                     if nb_points > 0:
                         # current pcd is source as we want to transform it to the reference
-                        #trans = self.local_registration(ee_pcd_object, reference_pcd, np.eye(4)).transformation
-                        trans, failure = self.perceive(pcd, reference_pcd, flatten=False, visualize=False)
+                        trans, failure = self.perceive(pcd, reference_pcd, flatten=False, visualize=True)
                         if failure:
                             continue
                         pcd.transform(trans)
-
+                    # instead of combining later just enrich reference pcd each iteration
                     pcd_collections.append(pcd.points)
+                    reference_pcd = pcd
+
+                # # This code was for choosing only pointcloud with most points as static reference and combining at the end
+                # ee_pcds.sort(key=lambda x: x[0], reverse=True)
+                # reference_pcd = ee_pcds[0][1] # point cloud with most points is reference
+                # pcd_collections.append(reference_pcd.points)
+                # for nb_points, pcd in ee_pcds[1:]:
+                #     if nb_points > 0:
+                #         # current pcd is source as we want to transform it to the reference
+                #         #trans = self.local_registration(ee_pcd_object, reference_pcd, np.eye(4)).transformation
+                #         trans, failure = self.perceive(pcd, reference_pcd, flatten=False, visualize=False)
+                #         if failure:
+                #             continue
+                #         pcd.transform(trans)
+                #
+                #     pcd_collections.append(pcd.points)
 
             self.initial_translation = stored_trans
 
