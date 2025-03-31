@@ -231,7 +231,7 @@ class IKSolver:
 
         # Set `l_gripper`'s orientation to `target_ori`
         #komo.addObjective([], ry.FS.quaternion, ['l_gripper'], ry.OT.eq, [1e1], target_ori)
-        komo.addObjective([], ry.FS.quaternion, ['l_gripper'], ry.OT.sos, [1e2], target_ori)
+        komo.addObjective([], ry.FS.quaternion, ['l_gripper'], ry.OT.sos, [1e3], target_ori)
 
         # Keep the end-effector above the table
         komo.addObjective([], ry.FS.position, ['l_gripper'], ry.OT.ineq, np.diag([0.0, 0.0, -1e1]), [0,0, self.sim.robot.tscale * 0.6])
