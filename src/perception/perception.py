@@ -29,25 +29,11 @@ class Perception:
             # 'left': {'pos': (0, -0.9, 1.72), 'ori': (9/8 * np.pi, 0, 0)}, # initially 5/4 * np.pi
             # # 'back': {'pos': (-0.4, -0.6, 1.72), 'ori': (7/8 * np.pi, 0, np.pi / 2)}  # (0, 3/4 * np.pi, 0)
 
-            # #'top': {'pos': (0, -0.6, 1.8), 'ori': (np.pi, 0, 0)},
-            # #'right': {'pos': (0, -0.4, 1.7), 'ori': (7 / 8 * np.pi, 0, 0)},  # initially 3/4 * np.pi
-            # 'front': {'pos': (0.2, -0.4, 1.7), 'ori': (7 / 8 * np.pi, 0, -1)},  # (7 / 8 * np.pi, 0, -np.pi / 2)
-            # 'left': {'pos': (0, -0.5, 1.7), 'ori': (-7 / 8 * np.pi, 0, 0)},  # initially 5/4 * np.pi
-            # # 'back': {'pos': (-0.3, -0.55, 1.7), 'ori': (7/8 * np.pi, 0, np.pi / 2)}  # (0, 3/4 * np.pi, 0)
-
-            'top': {'pos': (0, -0.6, 1.8), 'ori': (np.pi, 0, 0)},
-            #'top': {'pos': (0.04, -0.55, 1.66), 'ori': (3.06, 0.01, -0.18)},
-
-            #'right': {'pos': (0, -0.4, 1.7), 'ori': (7 / 8 * np.pi, 0, 0)},  # initially 3/4 * np.pi
-
-            #'front': {'pos': (0.2, -0.4, 1.7), 'ori': (7 / 8 * np.pi, np.pi/4, 0)},  # (7 / 8 * np.pi, 0, -np.pi / 2)
-            #'front': {'pos': (0.15, -0.39, 1.7), 'ori': (2.84, 0.63, -0.1)},  # (7 / 8 * np.pi, 0, -np.pi / 2)
-
-            #'left': {'pos': (0, -0.7, 1.5), 'ori': (9/8 * np.pi, 0, 0)},  # initially 5/4 * np.pi
-            'left': {'pos': (0, -0.58, 1.5), 'ori': (-2.83, 0.14, -0.01)},
-
-            #'back': {'pos': (-0.2, -0.4, 1.7), 'ori': (7/8 * np.pi, -np.pi/4, 0)}  # (0, 3/4 * np.pi, 0)
-            'back': {'pos': (-0.15, -0.39, 1.7), 'ori': (2.84, -0.63, -0.1)}
+            'top': {'pos': (0, -0.5, 1.8), 'ori': (np.pi, 0, 0)},
+            'right': {'pos': (0, -0.35, 1.7), 'ori': (7 / 8 * np.pi, 0, 0)},  # initially 3/4 * np.pi
+            'front': {'pos': (0.3, -0.55, 1.7), 'ori': (7 / 8 * np.pi, 0, -np.pi/2)},  # (7 / 8 * np.pi, 0, -np.pi / 2)
+            'left': {'pos': (0, -0.65, 1.65), 'ori': (9 / 8 * np.pi, 0, 0)},  # initially 5/4 * np.pi
+            #'back': {'pos': (-0.3, -0.6, 1.6), 'ori': (7/8 * np.pi, 0, np.pi / 2)}  # (0, 3/4 * np.pi, 0)
 
         }
 
@@ -271,9 +257,10 @@ class Perception:
                 target_ori = R.from_euler('xyz', view_params['ori']).as_quat()
 
                 # move robot ee to desired positions
-                print(f"View {view}, Target Pos: {target_pos}")
-                print("______________________________________________\n\n\n\n")
-                self.motion_controller.moveTo(target_pos, target_ori)
+
+                ret_val = self.motion_controller.moveTo(target_pos, target_ori)
+                if not ret_val:
+                    continue
                 # q = p.calculateInverseKinematics(sim.robot.id, sim.robot.ee_idx, target_pos, target_ori)[:-2]
                 # # if solution is not found /infeasible just skip
                 # if q is None:
@@ -352,7 +339,7 @@ class Perception:
                 #     # instead of combining later just enrich reference pcd each iteration
                 #     combined_pcd = np.vstack([combined_pcd, pcd.points])
                 # pcd_collections.append(combined_pcd)
-
+                ee_pcds = [(nb_points, pcd) for nb_points, pcd in ee_pcds if nb_points > 0]
                 max_index, max_entry = max(enumerate(ee_pcds),
                                            key=lambda p: p[1][0])  # get max entry sorted by number of points in pcd
                 reference_pcd = max_entry[1]
@@ -368,12 +355,11 @@ class Perception:
                 for i in view_order[1:]:  # skip first view as it is already added
                     print(i)
                     nb_points, pcd = ee_pcds[i]
-                    if nb_points > 0:
-                        # current pcd is source as we want to transform it to the reference
-                        trans, failure = self.perceive(pcd, reference_pcd, flatten=False, visualize=True)
-                        if failure:
-                            continue
-                        pcd.transform(trans)
+                    # current pcd is source as we want to transform it to the reference
+                    trans, failure = self.perceive(pcd, reference_pcd, flatten=False, visualize=True)
+                    if failure:
+                        continue
+                    pcd.transform(trans)
                     # instead of combining later just enrich reference pcd each iteration
                     pcd_collections.append(pcd.points)
                     reference_pcd = pcd
