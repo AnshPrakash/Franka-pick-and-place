@@ -111,18 +111,18 @@ class Grasper(ABC):
             Move the EE to the best grasp pose and then grip the object
         """
         # Generate grasp candidates; assume get_grasps returns best grasp when best=True
-        # grasps, _ = self.get_grasps(self.obj_id, pose, best=True, visualize=False)
-        # if grasps is None or len(grasps) == 0:
-        #     print("No valid grasp candidate found!")
-        #     return None
+        grasps, _ = self.get_grasps(self.obj_id, pose, best=True, visualize=False)
+        if grasps is None or len(grasps) == 0:
+            print("No valid grasp candidate found!")
+            return None
         
-        # best_grasp = grasps[0]
-        # final_grasp_pose = best_grasp.pose.as_matrix()  # A 4x4 homogeneous transformation matrix
-        
-        final_grasp_pose  = np.array([  [  0.98896849 ,  0.12177069 , -0.08433993 , -0.13198916],
-                                        [  0.11063837 , -0.98583892 , -0.12601893 , -0.5525772 ],
-                                        [ -0.098491   ,  0.11529752 , -0.98843614 , 1.30148848],
-                                        [  0.         ,  0.         ,  0.         ,  1.        ]])
+        best_grasp = grasps[0]
+        final_grasp_pose = best_grasp.pose.as_matrix()  # A 4x4 homogeneous transformation matrix
+        print("Final grasp pose", final_grasp_pose)
+        # final_grasp_pose  = np.array([  [  0.98896849 ,  0.12177069 , -0.08433993 , -0.13198916],
+        #                                 [  0.11063837 , -0.98583892 , -0.12601893 , -0.5525772 ],
+        #                                 [ -0.098491   ,  0.11529752 , -0.98843614 , 1.30148848],
+        #                                 [  0.         ,  0.         ,  0.         ,  1.        ]])
 
         # Define a safe offset (in meters) for the pre-grasp pose along the grasp approach direction.
         safe_distance = 0.1
@@ -196,6 +196,7 @@ class Grasper(ABC):
 
         print("Grasp executed successfully.")
         # return best_grasp
+        return final_grasp_pose
 
 
     def visualize_grasps(self, grasps, pc):
