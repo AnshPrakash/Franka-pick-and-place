@@ -1,6 +1,8 @@
 import numpy as np
 import pybullet as p
 import open3d as o3d
+from typing import Tuple
+from scipy.spatial.transform import Rotation as R
 
 
 def pb_image_to_numpy(rgbpx, depthpx, segpx, width, height):
@@ -80,3 +82,19 @@ def visualize_point_cloud(points, sphere_radius=0.01, color=[1, 0, 0, 1], max_po
                           baseVisualShapeIndex=visual_shape_id,
                           basePosition=pt.tolist())
 
+def matrix_to_pose(matrix: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+    """
+    Converts a 4x4 homogeneous transformation matrix into a translation vector and quaternion.
+    
+    Args:
+        matrix: 4x4 homogeneous transformation matrix.
+        
+    Returns:
+        A tuple (translation, quaternion), where:
+          - translation is a (3,) np.ndarray.
+          - quaternion is a (4,) np.ndarray in [x, y, z, w] order.
+    """
+    translation = matrix[:3, 3]
+    rotation_matrix = matrix[:3, :3]
+    quat = R.from_matrix(rotation_matrix).as_quat()  # returns [x, y, z, w]
+    return translation, quat
