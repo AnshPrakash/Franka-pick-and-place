@@ -12,7 +12,7 @@ from pybullet_object_models import ycb_objects  # type:ignore
 
 from src.simulation import Simulation
 from src.perception import Perception
-from src.control import IKSolver
+from src.moveIt import MoveIt
 from src.grasping import ImplicitGrasper, SampleGrasper
 from src.utils import visualize_point_cloud, get_robot_view_matrix, get_pcd_from_numpy
 
@@ -60,8 +60,8 @@ def run_exp(config: Dict[str, Any]):
             print(f"Robot End Effector Position: {ee_pos}")
             print(f"Robot End Effector Orientation: {ee_ori}")
 
-            inverse_kinematics = IKSolver(sim)
-            perception.set_ik_solver(inverse_kinematics)
+            motion_controller = MoveIt(sim)
+            perception.set_controller(motion_controller)
 
             # extract table height
             aabb_min, aabb_max = pybullet.getAABB(sim.object.id)
@@ -87,9 +87,17 @@ def run_exp(config: Dict[str, Any]):
             grasps, scores = grasper.get_grasps(sim.object.id, target_object_pos, best=False, visualize=True, include_gt=True, ref_pc=target_object_pcd)
             print(f"Grasps: {grasps}")
             print(f"Scores: {scores}")
+            grasp_pos = grasps[0].pose.translation
+            grasp_ori = grasps[0].pose.rotation.as_quat()
+            print(grasp_pos)
+            print(grasp_ori)
+
+            motion_controller.moveTo(grasp_pos, grasp_ori)
+            #motion_controller.moveTo(grasp_pos, grasp_ori)
 
             pos = target_object_pos[:3, 3]
             ori = target_object_pos[:3, :3]
+
             # convert rotation matrix to quaternion
             from scipy.spatial.transform import Rotation as R
             r = R.from_matrix(ori)

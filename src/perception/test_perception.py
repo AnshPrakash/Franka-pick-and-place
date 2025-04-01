@@ -12,7 +12,7 @@ from pybullet_object_models import ycb_objects  # type:ignore
 
 from src.simulation import Simulation
 from src.perception import Perception
-from src.control import IKSolver
+from src.moveIt import MoveIt
 from src.utils import visualize_point_cloud, get_robot_view_matrix, get_pcd_from_numpy
 
 
@@ -27,8 +27,7 @@ def run_exp(config: Dict[str, Any]):
     # PERCEPTION: initialize Perception class and load all necessary label meshes/pointclouds (atfer env has been reset the first time)
     perception = Perception(camera_stats=config['world_settings']['camera'])
     obstacle_init = True
-
-    for obj_name in obj_names[3:4]:
+    for obj_name in obj_names[8:9]:
         # PERCEPTION
         target_init = True
         for tstep in range(10):
@@ -55,13 +54,13 @@ def run_exp(config: Dict[str, Any]):
             print(f"Robot End Effector Position: {ee_pos}")
             print(f"Robot End Effector Orientation: {ee_ori}")
 
-            inverse_kinematics = IKSolver(sim)
-            perception.set_ik_solver(inverse_kinematics)
+            motion_controller = MoveIt(sim)
+            perception.set_controller(motion_controller)
             # PERCEPTION: get pointcloud for target object once before
 
             # ToDo: Check if initial skipping (due to falling object) is necessary
-            for i in range(50): # 50
-                sim.step()
+            # for i in range(100): # 50
+            #     sim.step()
 
             target_object_pcd = perception.get_pcd(sim.object.id, sim, use_static=False, use_ee=True, use_tsdf=False)
             target_object_pos, failure = perception.perceive(sim.object.id, target_object_pcd, visualize=True)
