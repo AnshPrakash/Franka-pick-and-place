@@ -16,6 +16,8 @@ from giga.utils import visual
 from giga.utils.implicit import as_mesh
 
 from src.simulation import Simulation
+from src.moveIt import MoveIt
+from src.utils import matrix_to_pose
 
 
 class Grasper(ABC):
@@ -25,6 +27,7 @@ class Grasper(ABC):
         self.obj_id = obj_id
         self.sim = sim
         self.obj_mesh = None
+        self.motion_controller = MoveIt(sim)
         if obj_id != -1:
             self.get_object_data(obj_id)
 
@@ -105,14 +108,19 @@ class Grasper(ABC):
             Move the EE to the best grasp pose and then grip the object
         """
         # Generate grasp candidates; assume get_grasps returns best grasp when best=True
-        grasps, _ = self.get_grasps(self.obj_id, pose, best=True, visualize=False)
-        if grasps is None or len(grasps) == 0:
-            print("No valid grasp candidate found!")
-            return None
+        # grasps, _ = self.get_grasps(self.obj_id, pose, best=True, visualize=False)
+        # if grasps is None or len(grasps) == 0:
+        #     print("No valid grasp candidate found!")
+        #     return None
         
-        best_grasp = grasps[0]
-        final_grasp_pose = best_grasp.pose  # A 4x4 homogeneous transformation matrix
+        # best_grasp = grasps[0]
+        # final_grasp_pose = best_grasp.pose.as_matrix()  # A 4x4 homogeneous transformation matrix
         
+        final_grasp_pose  = np.array([  [  0.98896849 ,  0.12177069 , -0.08433993 , -0.13198916],
+                                        [  0.11063837 , -0.98583892 , -0.12601893 , -0.5525772 ],
+                                        [ -0.098491   ,  0.11529752 , -0.98843614 , 1.30148848],
+                                        [  0.         ,  0.         ,  0.         ,  1.        ]])
+
         # Define a safe offset (in meters) for the pre-grasp pose along the grasp approach direction.
         safe_distance = 0.1
 
@@ -125,7 +133,8 @@ class Grasper(ABC):
         # --- Stage 1: Move to pre-grasp pose ---
         print("Moving to pre-grasp pose...")
         # This function is assumed to handle planning and execution.
-        self.robot.move_to_pose(pre_grasp_pose)
+        pre_grasp_position, pre_grasp_ori = matrix_to_pose(pre_grasp_pose)
+        self.motion_controller.moveTo(pre_grasp_position, pre_grasp_ori)
 
         # --- Stage 2: Linear approach ---
         print("Approaching final grasp pose from pre-grasp pose...")
@@ -143,7 +152,8 @@ class Grasper(ABC):
             interp_pose[:3, :3] = interp_rot
             interp_pose[:3, 3] = interp_pos
 
-            self.robot.move_to_pose(interp_pose)
+            interim_position, interim_pose = matrix_to_pose(interim_pose)
+            self.motion_controller.moveTo(interp_pose)
             p.stepSimulation()  # Allow simulation to update each step
 
         # --- Stage 3: Close the gripper ---
@@ -151,7 +161,7 @@ class Grasper(ABC):
         self.close_gripper()  # This function should command the gripper to close (see separate implementation).
 
         print("Grasp executed successfully.")
-        return best_grasp
+        # return best_grasp
 
 
     def visualize_grasps(self, grasps, pc):
