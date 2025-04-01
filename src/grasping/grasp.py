@@ -4,6 +4,7 @@ import argparse
 import pybullet as p
 
 from scipy.spatial.transform import Rotation as R
+from scipy.spatial.transform import Slerp
 import trimesh
 import open3d as o3d
 from open3d.visualization import draw_plotly
@@ -17,6 +18,7 @@ from giga.utils.implicit import as_mesh
 
 from src.simulation import Simulation
 from src.moveIt import MoveIt
+from src.control import IKSolver
 from src.utils import matrix_to_pose
 
 
@@ -28,6 +30,7 @@ class Grasper(ABC):
         self.sim = sim
         self.obj_mesh = None
         self.motion_controller = MoveIt(sim)
+        self.ik_solver = IKSolver(sim)
         if obj_id != -1:
             self.get_object_data(obj_id)
 
@@ -70,7 +73,7 @@ class Grasper(ABC):
             targetPositions=[0.0, 0.0],
         )
         # Step the simulation a few hundred times to allow the gripper to close.
-        for _ in range(100):
+        for _ in range(10):
             self.sim.step()
         
         print("Gripper closed.")
@@ -96,7 +99,7 @@ class Grasper(ABC):
             targetPositions=[0.4, 0.4],
         )
         # Step the simulation a few hundred times to allow the gripper to close.
-        for _ in range(100):
+        for _ in range(10):
             self.sim.step()
         
         print("Gripper opened.")
@@ -138,24 +141,55 @@ class Grasper(ABC):
 
         # --- Stage 2: Linear approach ---
         print("Approaching final grasp pose from pre-grasp pose...")
-        num_steps = 50
+        num_steps = 10
+
+        # Extract rotations from the pre-grasp and final grasp poses.
+        rot_pre = R.from_matrix(pre_grasp_pose[:3, :3])
+        rot_final = R.from_matrix(final_grasp_pose[:3, :3])
+        # Set up key times and create the Slerp object.
+        key_times = np.array([0, 1])
+        key_rots = R.from_quat(np.array([rot_pre.as_quat(), rot_final.as_quat()]))
+        slerp_obj = Slerp(key_times, key_rots)
+
+        # In case IK Solver fails during interpolation
+        final_position, final_ori = matrix_to_pose(final_grasp_pose)
+        fall_back_config = self.ik_solver.compute_target_configuration(final_position, final_ori)
+        
+        direct_try = False
+        
         for step in range(1, num_steps + 1):
             t = step / num_steps
             # Linearly interpolate the translation between pre-grasp and final grasp.
             interp_pos = (1 - t) * pre_grasp_pose[:3, 3] + t * final_grasp_pose[:3, 3]
-            # For rotation, use spherical linear interpolation (slerp) between the two rotations.
-            rot_pre = R.from_matrix(pre_grasp_pose[:3, :3])
-            rot_final = R.from_matrix(final_grasp_pose[:3, :3])
-            # Using SciPy’s slerp requires an array of rotations; here we simply compute the interpolated rotation.
-            interp_rot = R.slerp(0, 1, [rot_pre, rot_final])(t).as_matrix()
+            # Spherical linear interpolation of the rotations using slerp.
+            interp_rot = slerp_obj([t])[0].as_matrix()
+            
+            # Compose the full 4x4 transformation.
             interp_pose = np.eye(4)
             interp_pose[:3, :3] = interp_rot
             interp_pose[:3, 3] = interp_pos
 
-            interim_position, interim_pose = matrix_to_pose(interim_pose)
-            self.motion_controller.moveTo(interp_pose)
-            p.stepSimulation()  # Allow simulation to update each step
+            # Better fallback config:
+            q = self.ik_solver.compute_target_configuration(final_position, final_ori)
+            if q is not None:
+                fall_back_config = q
 
+            # Convert the matrix to a translation and quaternion using the helper function.
+            interim_position, interim_ori = matrix_to_pose(interp_pose)
+            q = self.ik_solver.compute_target_configuration(interim_position, interim_ori)
+            if q is None:
+                q = fall_back_config
+                direct_try = True
+
+            
+            self.sim.robot.position_control(q)
+            ITER = 2 if step < num_steps and not direct_try else 100
+            for _ in range(ITER):
+                self.sim.step()  # Allow simulation to update each step
+            
+            if direct_try:
+                break
+            
         # --- Stage 3: Close the gripper ---
         print("Closing the gripper...")
         self.close_gripper()  # This function should command the gripper to close (see separate implementation).

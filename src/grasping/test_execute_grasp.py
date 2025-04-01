@@ -60,8 +60,8 @@ def run_exp(config: Dict[str, Any]):
             print(f"Robot End Effector Position: {ee_pos}")
             print(f"Robot End Effector Orientation: {ee_ori}")
 
-            inverse_kinematics = IKSolver(sim)
-            perception.set_ik_solver(inverse_kinematics)
+            # inverse_kinematics = IKSolver(sim)
+            # perception.set_ik_solver(inverse_kinematics)
 
             # extract table height
             aabb_min, aabb_max = pybullet.getAABB(sim.object.id)
@@ -91,7 +91,8 @@ def run_exp(config: Dict[str, Any]):
             print("target_object_pos", target_object_pos)
 
             grasper.execute_grasp(target_object_pos)
-
+            
+            sim.close()
             exit()
 
             # grasps, scores = grasper.get_grasps(sim.object.id, target_object_pos, best=False, visualize=True, include_gt=True, ref_pc=target_object_pcd)
