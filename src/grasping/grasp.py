@@ -15,13 +15,15 @@ from giga.grasp_sampler import GpgGraspSamplerPcl
 from giga.utils import visual
 from giga.utils.implicit import as_mesh
 
+from src.simulation import Simulation
 
 
 class Grasper(ABC):
-    def __init__(self, obj_id=-1):
+    def __init__(self, sim: Simulation, obj_id=-1 ):
         """Base constructor for the Grasper class.
         The ground truth mesh file can already be loaded if object id is provided."""
         self.obj_id = obj_id
+        self.sim = sim
         self.obj_mesh = None
         if obj_id != -1:
             self.get_object_data(obj_id)
@@ -43,9 +45,114 @@ class Grasper(ABC):
     @abstractmethod
     def get_grasps(self, obj_id, pose, best=True, visualize=False, include_gt=False):
         pass
+    
+    def close_gripper(self):
+        """
+        Closes the Franka Panda gripper in the PyBullet simulation.
+        
+        This method assumes:
+        - The Grasper instance has an attribute `robot` with:
+            - robot.id: the PyBullet body ID for the robot,
+            - robot.gripper_idx: a list of joint indices corresponding to the gripper.
+        - A target joint position of 0.0 represents a fully closed gripper.
+        
+        It uses POSITION_CONTROL to command the gripper joints to the target position and
+        steps the simulation to let the gripper actuate.
+        """
+        
+        p.setJointMotorControlArray(
+            self.sim.robot.id,
+            jointIndices=self.sim.robot.gripper_idx,
+            controlMode=p.POSITION_CONTROL,
+            targetPositions=[0.0, 0.0],
+        )
+        # Step the simulation a few hundred times to allow the gripper to close.
+        for _ in range(100):
+            self.sim.step()
+        
+        print("Gripper closed.")
 
-    def execute_grasp(self):
-        pass
+    def open_gripper(self):
+        """
+        Opens the Franka Panda gripper in the PyBullet simulation.
+        
+        This method assumes:
+        - The Grasper instance has an attribute `robot` with:
+            - robot.id: the PyBullet body ID for the robot,
+            - robot.gripper_idx: a list of joint indices corresponding to the gripper.
+        - A target joint position of 0.4 represents a fully opened gripper.
+        
+        It uses POSITION_CONTROL to command the gripper joints to the target position and
+        steps the simulation to let the gripper actuate.
+        """
+        
+        p.setJointMotorControlArray(
+            self.sim.robot.id,
+            jointIndices=self.sim.robot.gripper_idx,
+            controlMode=p.POSITION_CONTROL,
+            targetPositions=[0.4, 0.4],
+        )
+        # Step the simulation a few hundred times to allow the gripper to close.
+        for _ in range(100):
+            self.sim.step()
+        
+        print("Gripper opened.")
+
+    def execute_grasp(self, pose):
+        """
+            Args: 
+                pose
+            Move the EE to the best grasp pose and then grip the object
+        """
+        # Generate grasp candidates; assume get_grasps returns best grasp when best=True
+        grasps, _ = self.get_grasps(self.obj_id, pose, best=True, visualize=False)
+        if grasps is None or len(grasps) == 0:
+            print("No valid grasp candidate found!")
+            return None
+        
+        best_grasp = grasps[0]
+        final_grasp_pose = best_grasp.pose  # A 4x4 homogeneous transformation matrix
+        
+        # Define a safe offset (in meters) for the pre-grasp pose along the grasp approach direction.
+        safe_distance = 0.1
+
+        # Assume that the approach direction is given by the third column (z-axis) of the rotation part.
+        approach_vector = final_grasp_pose[:3, 2]
+        # Compute pre-grasp pose by translating the final grasp pose backwards along the approach direction.
+        pre_grasp_pose = final_grasp_pose.copy()
+        pre_grasp_pose[:3, 3] -= safe_distance * approach_vector
+
+        # --- Stage 1: Move to pre-grasp pose ---
+        print("Moving to pre-grasp pose...")
+        # This function is assumed to handle planning and execution.
+        self.robot.move_to_pose(pre_grasp_pose)
+
+        # --- Stage 2: Linear approach ---
+        print("Approaching final grasp pose from pre-grasp pose...")
+        num_steps = 50
+        for step in range(1, num_steps + 1):
+            t = step / num_steps
+            # Linearly interpolate the translation between pre-grasp and final grasp.
+            interp_pos = (1 - t) * pre_grasp_pose[:3, 3] + t * final_grasp_pose[:3, 3]
+            # For rotation, use spherical linear interpolation (slerp) between the two rotations.
+            rot_pre = R.from_matrix(pre_grasp_pose[:3, :3])
+            rot_final = R.from_matrix(final_grasp_pose[:3, :3])
+            # Using SciPy’s slerp requires an array of rotations; here we simply compute the interpolated rotation.
+            interp_rot = R.slerp(0, 1, [rot_pre, rot_final])(t).as_matrix()
+            interp_pose = np.eye(4)
+            interp_pose[:3, :3] = interp_rot
+            interp_pose[:3, 3] = interp_pos
+
+            self.robot.move_to_pose(interp_pose)
+            p.stepSimulation()  # Allow simulation to update each step
+
+        # --- Stage 3: Close the gripper ---
+        print("Closing the gripper...")
+        self.close_gripper()  # This function should command the gripper to close (see separate implementation).
+
+        print("Grasp executed successfully.")
+        return best_grasp
+
 
     def visualize_grasps(self, grasps, pc):
         # Visualize point cloud and grasps
