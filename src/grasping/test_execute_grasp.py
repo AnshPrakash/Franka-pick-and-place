@@ -1,7 +1,7 @@
 import os
 import glob
 
-import pybullet as p
+import pybullet
 import yaml
 
 import numpy as np
@@ -15,8 +15,7 @@ from src.perception import Perception
 from src.control import IKSolver
 from src.moveIt import MoveIt
 from src.grasping import ImplicitGrasper, SampleGrasper
-from src.utils import extract_mesh_data, matrix_to_pose
-
+from src.utils import visualize_point_cloud, get_robot_view_matrix, get_pcd_from_numpy
 
 
 def run_exp(config: Dict[str, Any]):
@@ -26,21 +25,18 @@ def run_exp(config: Dict[str, Any]):
     object_root_path = ycb_objects.getDataPath()
     files = glob.glob(os.path.join(object_root_path, "Ycb*"))
     obj_names = [file.split('/')[-1] for file in files]
-    print(obj_names)
     sim = Simulation(config)
     # PERCEPTION: initialize Perception class and load all necessary label meshes/pointclouds (atfer env has been reset the first time)
     perception = Perception(camera_stats=config['world_settings']['camera'])
     obstacle_init = True
     # GRASPING: initialize Grasper class
     #grasper = ImplicitGrasper('../../GIGA/data/models/giga_pile.pt')
-    
 
-    for obj_name in obj_names[-2:-1]:
+    for obj_name in obj_names[2:3]:
         # PERCEPTION
         target_init = True
         for tstep in range(1):
             sim.reset(obj_name)
-            print("Object name", obj_name)
             grasper = SampleGrasper(sim)
             # PERCEPTION: only init obstacles once and target after object switch
             if obstacle_init:
@@ -66,11 +62,11 @@ def run_exp(config: Dict[str, Any]):
             print(f"Robot End Effector Orientation: {ee_ori}")
 
             inverse_kinematics = IKSolver(sim)
-            motion_controller = MoveIt(sim)
-            perception.set_controller(motion_controller)
+            # perception.set_ik_solver(inverse_kinematics)
+            perception.set_controller(MoveIt(sim))
 
             # extract table height
-            aabb_min, aabb_max = p.getAABB(sim.object.id)
+            aabb_min, aabb_max = pybullet.getAABB(sim.object.id)
             print(aabb_min)
             print(aabb_max)
             # Convert to NumPy arrays for easier manipulation
@@ -84,96 +80,44 @@ def run_exp(config: Dict[str, Any]):
             print(f"Table Dimensions:\nWidth: {width}\nDepth: {depth}\nHeight: {height}")
 
             # ToDo: Check if initial skipping (due to falling object) is necessary
-            for i in range(80): # 50
+            for i in range(70): # 50
                 sim.step()
 
             # target_object_pcd = perception.get_pcd(sim.object.id, sim, use_static=False, use_ee=True, use_tsdf=False)
             # target_object_pos, failure = perception.perceive(sim.object.id, target_object_pcd, flatten=False, visualize=True)
-            # target_object_pos, failure = perception.perceive(sim.object.id, target_object_pcd, flatten=False, visualize=False)
-            # print(target_object_pos)
+            
 
-            #hammer 1.5
-            # target_object_pos = np.array(
-            #     [
-            #         [ 0.99997107, -0.00670796,  0.00358629, -0.03395236],
-            #         [ 0.0066931 ,  0.99996903,  0.00413986, -0.57064029],
-            #         [-0.00361395, -0.00411574,  0.999985  ,  1.27670169],
-            #         [ 0.        ,  0.        ,  0.        ,  1.        ]
-            #     ]
-            # )
+            target_object_pos = np.array([[ 0.98857895, -0.01786816,  0.14964086, -0.09125869],
+                                           [ 0.0121794,   0.99917096,  0.03884666, -0.47388326],
+                                           [-0.15021092, -0.03658046,  0.987977,    1.27830418],
+                                           [ 0.,          0.,          0.,          1.        ]])
+            print("target_object_pos", target_object_pos)
 
+            expected_grasp_pose = grasper.execute_grasp(target_object_pos)
+            
 
-            # Chips Can
-            # target_object_pos = np.array(
-            #     [[ 4.70818890e-01,  8.82229641e-01,  6.57911285e-04, -5.51576042e-02],
-            #     [-8.82205258e-01 , 4.70811188e-01, -7.12095389e-03, -4.59120981e-01],
-            #     [-6.59206859e-03 , 2.77226682e-03,  9.99974429e-01,  1.37937734e+00],
-            #     [ 0.00000000e+00 , 0.00000000e+00,  0.00000000e+00,  1.00000000e+00]]
-            # )
+            from src.utils import matrix_to_pose
+            final_position, final_ori = matrix_to_pose(expected_grasp_pose)
+            robo_posi, robo_ori = sim.robot.get_ee_pose()
+            
+            print("Final position",final_position)
+            print("Final Ori", final_ori)
 
-            #scissor 
-            # target_object_pos = np.array(
-            #     [[ 0.99887581, -0.02327664,  0.04129545, -0.09208208],
-            #     [ 0.02407974 , 0.99952837 ,-0.01905793 ,-0.47589487],
-            #     [-0.04083237 , 0.02003089 , 0.99896521 , 1.26693959],
-            #     [ 0.         , 0.         , 0.         , 1.        ]]
-            # )
-            # target_obj_posi, target_obj_ori = matrix_to_pose(target_object_pos)
-            # inverse_kinematics.debug("target Estimated pose", target_obj_posi, target_obj_ori)
+            print("Robot position", robo_posi)
+            print("Robot ori", robo_ori)
 
-            actual_position, actual_orientation = p.getBasePositionAndOrientation(sim.object.id)
-            # inverse_kinematics.debug("target Actual pose", actual_position, actual_orientation)
-
-            actual_pose_matrix = np.eye(4)
-            from scipy.spatial.transform import Rotation as R  
-            actual_pose_matrix[:3, :3] = R.from_quat(actual_orientation).as_matrix()  # Convert quaternion to rotation matrix
-            actual_pose_matrix[:3, 3] = np.array(actual_position)
-
-            #VISUALISE GRASP
-            # target_object_pcd = perception.get_pcd(sim.object.id, sim, use_static=False, use_ee=True, use_tsdf=False)
-
-            grasps, scores = grasper.get_grasps(sim.object.id, actual_pose_matrix, best=False, visualize=True, include_gt=True, ref_pc=None)
-            vertices, triangles = extract_mesh_data(sim.object.id)
-            inverse_kinematics.debug_object(sim.object.id, vertices, triangles)
-            # for i, grasp in enumerate(grasps):
-            #     possible_grasp = grasp.pose.as_matrix()
-            #     grasp_position, grasp_orientation = matrix_to_pose(possible_grasp)
-            #     inverse_kinematics.debug(f"Grasp pose {i} ", grasp_position, grasp_orientation)
-
-            expected_grasp_pose = grasper.execute_grasp(actual_pose_matrix)
-
-            # expected_grasp_pose = grasper.execute_grasp(target_object_pos)
-
-            grasp_position, grasp_orientation = matrix_to_pose(expected_grasp_pose)
-
-            # check grasp in RY config Faster than pybullet Rendering
-            joint_states = sim.robot.get_joint_positions()
-            inverse_kinematics.C.setJointState(joint_states)
-            inverse_kinematics.debug("Grasp pose", grasp_position, grasp_orientation)
-
-            goal_pos = sim.goal.goal_pos
-            goal_pos = [goal_pos[0] - 0.1, goal_pos[1] - 0.1, goal_pos[2] +0.5 ] 
-            goal_ori = R.from_euler('xyz', [np.pi, 0, 0]).as_quat()
-            motion = MoveIt(sim)
-            motion.moveTo(goal_pos, goal_ori)
-            grasper.open_gripper()
+            inverse_kinematics.debug("Expected position of EE", final_position, final_ori)
+            inverse_kinematics.debug("Actual position of EE", robo_posi, robo_ori)
             sim.close()
             exit()
 
-            grasps, scores = grasper.get_grasps(sim.object.id, target_object_pos, best=False, visualize=True, include_gt=True, ref_pc=target_object_pcd)
-            # print(f"Grasps: {grasps}")
-            # print(f"Scores: {scores}")
-            # grasp_pos = grasps[0].pose.translation
-            # grasp_ori = grasps[0].pose.rotation.as_quat()
-            # print(grasp_pos)
-            # print(grasp_ori)
-
-            # motion_controller.moveTo(grasp_pos, grasp_ori)
-            #motion_controller.moveTo(grasp_pos, grasp_ori)
+            # grasps, scores = grasper.get_grasps(sim.object.id, target_object_pos, best=False, visualize=True, include_gt=True, ref_pc=target_object_pcd)
+            grasps, scores = grasper.get_grasps(sim.object.id, target_object_pos, best=True, visualize=False)
+            print(f"Grasps: {grasps}")
+            print(f"Scores: {scores}")
 
             pos = target_object_pos[:3, 3]
             ori = target_object_pos[:3, :3]
-
             # convert rotation matrix to quaternion
             from scipy.spatial.transform import Rotation as R
             r = R.from_matrix(ori)

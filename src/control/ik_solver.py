@@ -160,7 +160,35 @@ class IKSolver:
         
         return q_rai
 
+    def debug_object(self, object_id, vertices, triangles):
+        # Create a new frame for the object
+        obj_frame = self.C.addFrame("YcbObject")
 
+        
+        # Set the mesh for the object frame
+        obj_frame.setMesh(vertices, triangles)
+
+        # Set the pose of the object frame (example values)
+        obj_position, obj_orientation = p.getBasePositionAndOrientation(object_id)
+        obj_orientation = [obj_orientation[3], obj_orientation[0], obj_orientation[1], obj_orientation[2]]
+        obj_frame.setPosition(obj_position)
+        obj_frame.setQuaternion(obj_orientation)  # RAi convention: [w,x,y,z]
+
+        # Optionally, assign a color or other visual properties
+        obj_frame.setColor([0.0, 1.0, 0.0])  # Green color
+        self.C.view(True)
+
+
+    def debug(self, marker_name, target_pos, target_ori):
+        target_ori = self.get_ry_ee_ori(target_ori)
+        target_frame = self.C.getFrame(marker_name)
+        if target_frame is None:
+            target_frame = self.C.addFrame(marker_name)
+        target_frame.setShape(ry.ST.marker, [.4])  # Marker is visual only
+        target_frame.setPosition(target_pos)
+        target_frame.setQuaternion(target_ori)
+        target_frame.setColor([0.0, 1.0, 0.0])  # Green marker
+        self.C.view(True)
 
 
 
