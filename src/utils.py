@@ -99,32 +99,6 @@ def matrix_to_pose(matrix: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
     quat = R.from_matrix(rotation_matrix).as_quat()  # returns [x, y, z, w]
     return translation, quat
 
-# def extract_mesh_data(object_id, link_index=-1, scale=1.0):
-#     """
-#     Extract mesh data (vertices and triangle indices) from a PyBullet object.
-#     Optionally apply a scaling factor.
-    
-#     Args:
-#         object_id: The PyBullet object id.
-#         link_index: The link index to extract mesh from (-1 for base).
-#         scale: A scaling factor to apply to the vertices.
-        
-#     Returns:
-#         vertices: A numpy array of shape (N, 3).
-#         triangles: A numpy array of shape (M, 3) of indices.
-#     """
-#     # p.getMeshData returns a tuple: (numVertices, vertices, numIndices, indices)
-#     # Note: Depending on PyBullet version, the format might differ.
-#     mesh_data = p.getMeshData(object_id, linkIndex=link_index)
-#     if mesh_data is None:
-#         raise ValueError("Failed to extract mesh data for object_id %s" % object_id)
-#     # Extract vertices; they are returned as a flat list
-#     vertices = np.array(mesh_data[1]).reshape(-1, 3) * scale
-#     # Extract indices; they are returned as a flat list and need to be reshaped into groups of 3.
-#     indices_flat = mesh_data[3]
-#     # Ensure we have a multiple of 3 indices
-#     triangles = np.array(indices_flat).reshape(-1, 3)
-#     return vertices, triangles
 
 def extract_mesh_data(object_id):
     import trimesh
