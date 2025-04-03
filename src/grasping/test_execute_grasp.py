@@ -13,6 +13,7 @@ from pybullet_object_models import ycb_objects  # type:ignore
 from src.simulation import Simulation
 from src.perception import Perception
 from src.control import IKSolver
+from src.moveIt import MoveIt
 from src.grasping import ImplicitGrasper, SampleGrasper
 from src.utils import visualize_point_cloud, get_robot_view_matrix, get_pcd_from_numpy
 
@@ -31,7 +32,7 @@ def run_exp(config: Dict[str, Any]):
     # GRASPING: initialize Grasper class
     #grasper = ImplicitGrasper('../../GIGA/data/models/giga_pile.pt')
 
-    for obj_name in obj_names[1:2]:
+    for obj_name in obj_names[2:3]:
         # PERCEPTION
         target_init = True
         for tstep in range(1):
@@ -60,8 +61,9 @@ def run_exp(config: Dict[str, Any]):
             print(f"Robot End Effector Position: {ee_pos}")
             print(f"Robot End Effector Orientation: {ee_ori}")
 
-            # inverse_kinematics = IKSolver(sim)
+            inverse_kinematics = IKSolver(sim)
             # perception.set_ik_solver(inverse_kinematics)
+            perception.set_controller(MoveIt(sim))
 
             # extract table height
             aabb_min, aabb_max = pybullet.getAABB(sim.object.id)
@@ -78,20 +80,34 @@ def run_exp(config: Dict[str, Any]):
             print(f"Table Dimensions:\nWidth: {width}\nDepth: {depth}\nHeight: {height}")
 
             # ToDo: Check if initial skipping (due to falling object) is necessary
-            for i in range(50): # 50
+            for i in range(70): # 50
                 sim.step()
 
             # target_object_pcd = perception.get_pcd(sim.object.id, sim, use_static=False, use_ee=True, use_tsdf=False)
             # target_object_pos, failure = perception.perceive(sim.object.id, target_object_pcd, flatten=False, visualize=True)
             
+
             target_object_pos = np.array([[ 0.98857895, -0.01786816,  0.14964086, -0.09125869],
                                            [ 0.0121794,   0.99917096,  0.03884666, -0.47388326],
                                            [-0.15021092, -0.03658046,  0.987977,    1.27830418],
                                            [ 0.,          0.,          0.,          1.        ]])
             print("target_object_pos", target_object_pos)
 
-            grasper.execute_grasp(target_object_pos)
+            expected_grasp_pose = grasper.execute_grasp(target_object_pos)
             
+
+            from src.utils import matrix_to_pose
+            final_position, final_ori = matrix_to_pose(expected_grasp_pose)
+            robo_posi, robo_ori = sim.robot.get_ee_pose()
+            
+            print("Final position",final_position)
+            print("Final Ori", final_ori)
+
+            print("Robot position", robo_posi)
+            print("Robot ori", robo_ori)
+
+            inverse_kinematics.debug("Expected position of EE", final_position, final_ori)
+            inverse_kinematics.debug("Actual position of EE", robo_posi, robo_ori)
             sim.close()
             exit()
 
