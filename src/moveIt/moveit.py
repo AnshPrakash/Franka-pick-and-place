@@ -101,7 +101,7 @@ class MoveIt:
         position = l_gripper.getPosition()
         orientation_ry = l_gripper.getQuaternion()
         orientation = self.get_pybullet_ee_ori(orientation_ry)
-        self.planner.C.view(True)
+        # self.planner.C.view(True)
         result = self.moveTo(position, orientation)
 
         return result
