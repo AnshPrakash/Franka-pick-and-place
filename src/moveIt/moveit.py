@@ -39,11 +39,45 @@ class MoveIt:
 
         # Convert the tray's quaternion (PyBullet format: [x, y, z, w]) to a rotation matrix
         r = R.from_quat(tray_ori)
-        
         # Transform the local points to world coordinates:
         # Apply rotation then translation.
         points_world = r.apply(points_local) + np.array(tray_pos)
         return points_world
+
+    @staticmethod
+    def get_pybullet_ee_ori(rai_orientation):
+        """
+        Convert a RAi configuration orientation quaternion (for the 'l_gripper' frame)
+        in [w, x, y, z] order to a PyBullet end-effector orientation quaternion in [x, y, z, w] order.
+        
+        Args:
+            rai_orientation: A quaternion from RAi in [w, x, y, z] order.
+            
+        Returns:
+            A quaternion in PyBullet convention ([x, y, z, w]).
+        """
+
+        # Convert the RAi quaternion [w, x, y, z] to PyBullet format [x, y, z, w]
+        q_pb_format = [rai_orientation[1], rai_orientation[2], rai_orientation[3], rai_orientation[0]]
+        
+        # Create a rotation object from this quaternion
+        r_rai = R.from_quat(q_pb_format)
+        
+        # Define the transformation matrix T that was used in the forward conversion:
+        # This matrix swaps the x and y axes and flips the z axis.
+        T = np.array([[0, 1, 0],
+                    [1, 0, 0],
+                    [0, 0, -1]])
+        T_rot = R.from_matrix(T)
+        
+        # Reverse the transformation:
+        # In the forward function we had: r = r_pb * T_rot,
+        # so to recover r_pb we compute: r_pb = r_rai * T_rot.inv()
+        r_pb = r_rai * T_rot.inv()
+        
+        # Get the resulting quaternion in PyBullet convention ([x, y, z, w])
+        q_pb = r_pb.as_quat()
+        return q_pb
 
         
     def go_to_tray(self):
@@ -55,7 +89,7 @@ class MoveIt:
         q = None
         
         for goal_position in sampled_goals:
-            q = self.planner.compute_target_configuration(goal_position, target_ori=None, convert_ori_to_ry=False)
+            q = self.planner.compute_target_configuration(goal_position, target_ori=None)
             if q is not None:
                 break
         if q is None:
@@ -64,10 +98,11 @@ class MoveIt:
                 
         self.planner.C.setJointState(q)
         l_gripper = self.planner.C.getFrame("l_gripper")
-        position_ry = l_gripper.getPosition()
+        position = l_gripper.getPosition()
         orientation_ry = l_gripper.getQuaternion()
+        orientation = self.get_pybullet_ee_ori(orientation_ry)
         self.planner.C.view(True)
-        result = self.moveTo(position_ry, orientation_ry, convert_ori_to_ry=False)
+        result = self.moveTo(position, orientation)
 
         return result
         
@@ -174,7 +209,7 @@ class MoveIt:
                 break
         return True
 
-    def moveTo(self, goal_position, goal_ori, joint_space_crit=False, convert_ori_to_ry=True):
+    def moveTo(self, goal_position, goal_ori, joint_space_crit=False):
         """
         Args:
             goal_position: Desired end-effector position.
@@ -197,9 +232,8 @@ class MoveIt:
         # Get the target joint configuration
         qT = self.planner.compute_target_configuration( 
                                                         goal_position,
-                                                        goal_ori,
-                                                        convert_ori_to_ry=convert_ori_to_ry
-            )
+                                                        goal_ori
+                                        )
         if qT is None:
             print("IK failed to compute a goal configuration.")
             return False

@@ -44,8 +44,6 @@ def run_exp(config: Dict[str, Any]):
             # goal_ori = R.from_euler('xyz', [np.pi, 0, 0]).as_quat()
             motion = MoveIt(sim)
             motion.go_to_tray()
-        while True:
-            pass
     sim.close()
 
 
