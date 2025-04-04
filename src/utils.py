@@ -102,12 +102,14 @@ def matrix_to_pose(matrix: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
 
 def extract_mesh_data(object_id):
     import trimesh
+    # Extract visual data
     visual_data = p.getVisualShapeData(object_id)
     # get global scaling of object
     scaling = visual_data[0][3]
     # passes the mesh file to load
     mesh_file = visual_data[0][4].decode('utf-8')
-    # try with open3d and use trimesh if failed (due to non triangulated meshes)
+    
+    # Load mesh using Open3D or trimesh
     mesh = o3d.io.read_triangle_mesh(mesh_file, enable_post_processing=True)
     if mesh.is_empty():
         tri_mesh = trimesh.load(mesh_file)
@@ -115,16 +117,31 @@ def extract_mesh_data(object_id):
             o3d.utility.Vector3dVector(tri_mesh.vertices),
             o3d.utility.Vector3iVector(tri_mesh.faces)
         )
-    # scale along all axis
+    
+    # Scale the mesh
     mesh.vertices = o3d.utility.Vector3dVector(
         np.asarray(mesh.vertices) * np.array(scaling))
     # possibly recenter the mesh => https://www.open3d.org/docs/latest/tutorial/Basic/transformation.html might not be necessary?
     center = mesh.get_center()
     print(f"Mesh Center Object {object_id}: ", center)
     mesh.translate(-center)
-    print(f"After translating center for Object {object_id}: ", mesh.get_center())
+    
+    # Get the object's current pose from PyBullet
+    pos, orn = p.getBasePositionAndOrientation(object_id)
+    # Convert quaternion to rotation matrix (3x3)
+    R = np.array(p.getMatrixFromQuaternion(orn)).reshape(3, 3)
+    
+    # Build a 4x4 homogeneous transformation matrix:
+    T = np.eye(4)
+    T[:3, :3] = R
+    T[:3, 3] = pos
 
+    # Apply the transformation to the mesh vertices
+    mesh.transform(T)
+    
+    # Retrieve the transformed vertices and triangles
     vertices = np.asarray(mesh.vertices)
     triangles = np.asarray(mesh.triangles)
-
+    
     return vertices, triangles
+

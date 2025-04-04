@@ -169,10 +169,10 @@ class IKSolver:
         obj_frame.setMesh(vertices, triangles)
 
         # Set the pose of the object frame (example values)
-        obj_position, obj_orientation = p.getBasePositionAndOrientation(object_id)
-        obj_orientation = [obj_orientation[3], obj_orientation[0], obj_orientation[1], obj_orientation[2]]
-        obj_frame.setPosition(obj_position)
-        obj_frame.setQuaternion(obj_orientation)  # RAi convention: [w,x,y,z]
+        # obj_position, obj_orientation = p.getBasePositionAndOrientation(object_id)
+        # obj_orientation = [obj_orientation[3], obj_orientation[0], obj_orientation[1], obj_orientation[2]]
+        # obj_frame.setPosition(obj_position)
+        # obj_frame.setQuaternion(obj_orientation)  # RAi convention: [w,x,y,z]
 
         # Optionally, assign a color or other visual properties
         obj_frame.setColor([0.0, 1.0, 0.0])  # Green color
@@ -262,7 +262,8 @@ class IKSolver:
         komo.addObjective([], ry.FS.quaternion, ['l_gripper'], ry.OT.sos, [1e3], target_ori)
 
         # Keep the end-effector above the table
-        komo.addObjective([], ry.FS.position, ['l_gripper'], ry.OT.ineq, np.diag([0.0, 0.0, -1e1]), [0,0, self.sim.robot.tscale * 0.6])
+        # Since the box is defined using half extents, its top surface is at:
+        komo.addObjective([], ry.FS.position, ['l_gripper'], ry.OT.ineq, np.diag([0.0, 0.0, -1e1]), [0,0, 1.0])
         # komo.addObjective([], ry.FS.distance, ['l_gripper', 'l_panda_base'], ry.OT.ineq, [1e1], [0.05])
 
 

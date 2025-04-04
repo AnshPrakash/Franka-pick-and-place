@@ -35,12 +35,12 @@ def run_exp(config: Dict[str, Any]):
     #grasper = ImplicitGrasper('../../GIGA/data/models/giga_pile.pt')
     
 
-    for obj_name in obj_names[-2:-1]:
+    for obj_name in obj_names[0:1]:
         # PERCEPTION
         target_init = True
         for tstep in range(1):
-            sim.reset(obj_name)
             print("Object name", obj_name)
+            sim.reset(obj_name)
             grasper = SampleGrasper(sim)
             # PERCEPTION: only init obstacles once and target after object switch
             if obstacle_init:
@@ -84,7 +84,8 @@ def run_exp(config: Dict[str, Any]):
             print(f"Table Dimensions:\nWidth: {width}\nDepth: {depth}\nHeight: {height}")
 
             # ToDo: Check if initial skipping (due to falling object) is necessary
-            for i in range(80): # 50
+            grasper.open_gripper()
+            for i in range(300): # 50
                 sim.step()
 
             # target_object_pcd = perception.get_pcd(sim.object.id, sim, use_static=False, use_ee=True, use_tsdf=False)
@@ -132,7 +133,7 @@ def run_exp(config: Dict[str, Any]):
             #VISUALISE GRASP
             # target_object_pcd = perception.get_pcd(sim.object.id, sim, use_static=False, use_ee=True, use_tsdf=False)
 
-            grasps, scores = grasper.get_grasps(sim.object.id, actual_pose_matrix, best=False, visualize=True, include_gt=True, ref_pc=None)
+            # grasps, scores = grasper.get_grasps(sim.object.id, actual_pose_matrix, best=False, visualize=True, include_gt=True, ref_pc=None)
             vertices, triangles = extract_mesh_data(sim.object.id)
             inverse_kinematics.debug_object(sim.object.id, vertices, triangles)
             # for i, grasp in enumerate(grasps):

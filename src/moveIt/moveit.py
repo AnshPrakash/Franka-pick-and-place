@@ -86,6 +86,37 @@ class MoveIt:
 
         return True
 
+    def goTo(self, goal_position, goal_ori):
+        """
+            Does not use the planner, but directly moves to the goal position
+            and orientation. This is used for the final goal position
+            of the robot, where we do not want to check for collisions
+            and just move to the goal position and orientation.
+            Args:
+                goal_position: Desired end-effector position.
+                goal_ori: Desired end-effector orientation in PyBullet quaternion format.
+
+            Returns:
+                True: if goal pose possible and tries its best to EE
+                False: if goal pose is not possible according to control module
+        """
+        qT = self.planner.compute_target_configuration(goal_position, goal_ori)
+        if qT is None:
+            print("IK failed to compute a goal configuration.")
+            return False
+        qT = np.array(qT)
+        self.sim.robot.position_control(qT)
+        MAX_ITER = 100
+        epsilon = 0.03  # for position/config change
+        for i in range(MAX_ITER):
+            self.sim.step()
+            robot_joint_config = self.sim.robot.get_joint_positions()
+            delta_config = np.abs(robot_joint_config - qT)
+            if (np.max(delta_config) < epsilon):
+                print("Goal Achieved")
+                break
+        return True
+
     def moveTo(self, goal_position, goal_ori, joint_space_crit=False):
         """
         Args:
