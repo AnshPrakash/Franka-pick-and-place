@@ -66,7 +66,7 @@ class MoveIt:
         l_gripper = self.planner.C.getFrame("l_gripper")
         position_ry = l_gripper.getPosition()
         orientation_ry = l_gripper.getQuaternion()
-        self.planner.C.view(True)
+        # self.planner.C.view(True)
         result = self.moveTo(position_ry, orientation_ry, convert_ori_to_ry=False)
 
         return result
