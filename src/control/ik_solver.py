@@ -192,13 +192,13 @@ class IKSolver:
 
 
 
-    def compute_target_configuration(self, target_pos, target_ori = None, convert_ori_to_ry = True):
+    def compute_target_configuration(self, target_pos, target_ori = None):
         """
            Compute the robot's joint configuration given the target end-effector
            position and orientation
         """
         # Convert target position and orientation to ry coordinate system
-        if target_ori is not None and  convert_ori_to_ry:
+        if target_ori is not None:
             target_ori = self.get_ry_ee_ori(target_ori)
         
         # Create a new frame for the debugging target
