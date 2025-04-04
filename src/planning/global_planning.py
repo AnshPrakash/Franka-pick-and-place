@@ -15,8 +15,11 @@ class Global_planner(IKSolver):
         super().__init__(sim)
         
         self.obstacles_tracker = []
-        for obstacle in self.sim.obstacles:
-            self.obstacles_tracker.append(Track(obstacle.id,sim))
+        try:
+            for obstacle in self.sim.obstacles:
+                self.obstacles_tracker.append(Track(obstacle.id,sim))
+        except Exception as e:
+            print("INFO: No dynamic obstacles in the simulation environment.")
 
     def get_obstacles(self) -> list:
         """
