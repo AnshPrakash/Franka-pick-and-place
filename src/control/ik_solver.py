@@ -192,14 +192,14 @@ class IKSolver:
 
 
 
-    def compute_target_configuration(self, target_pos, target_ori):
+    def compute_target_configuration(self, target_pos, target_ori = None):
         """
            Compute the robot's joint configuration given the target end-effector
            position and orientation
         """
         # Convert target position and orientation to ry coordinate system
-
-        target_ori = self.get_ry_ee_ori(target_ori)
+        if target_ori is not None:
+            target_ori = self.get_ry_ee_ori(target_ori)
         
         # Create a new frame for the debugging target
         
@@ -208,7 +208,8 @@ class IKSolver:
             target_frame = self.C.addFrame('target_marker')
         target_frame.setShape(ry.ST.marker, [.4])  # Marker is visual only
         target_frame.setPosition(target_pos)
-        target_frame.setQuaternion(target_ori)
+        if target_ori is not None:
+            target_frame.setQuaternion(target_ori)
         target_frame.setColor([0.0, 1.0, 0.0])  # Green marker
 
         # Get current robot state
@@ -259,7 +260,8 @@ class IKSolver:
 
         # Set `l_gripper`'s orientation to `target_ori`
         #komo.addObjective([], ry.FS.quaternion, ['l_gripper'], ry.OT.eq, [1e1], target_ori)
-        komo.addObjective([], ry.FS.quaternion, ['l_gripper'], ry.OT.sos, [1e3], target_ori)
+        if target_ori is not None:
+            komo.addObjective([], ry.FS.quaternion, ['l_gripper'], ry.OT.sos, [1e3], target_ori)
 
         # Keep the end-effector above the table
         # Since the box is defined using half extents, its top surface is at:
