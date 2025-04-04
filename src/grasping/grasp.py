@@ -96,7 +96,7 @@ class Grasper(ABC):
             self.sim.robot.id,
             jointIndices=self.sim.robot.gripper_idx,
             controlMode=p.POSITION_CONTROL,
-            targetPositions=[0.4, 0.4],
+            targetPositions=[0.6, 0.6],
         )
         # Step the simulation a few hundred times to allow the gripper to close.
         for _ in range(10):
@@ -139,7 +139,7 @@ class Grasper(ABC):
         #                                 [  0.         ,  0.         ,  0.         ,  1.        ]])
 
         # Define a safe offset (in meters) for the pre-grasp pose along the grasp approach direction.
-        safe_distance = 0.1
+        safe_distance = 0.19
 
         # Assume that the approach direction is given by the third column (z-axis) of the rotation part.
         approach_vector = final_grasp_pose[:3, 2]
@@ -151,7 +151,7 @@ class Grasper(ABC):
         print("Moving to pre-grasp pose...")
         # This function is assumed to handle planning and execution.
         pre_grasp_position, pre_grasp_ori = matrix_to_pose(pre_grasp_pose)
-        self.motion_controller.moveTo(pre_grasp_position, pre_grasp_ori)
+        self.motion_controller.goTo(pre_grasp_position, pre_grasp_ori)
 
         # --- Stage 2: Linear approach ---
         print("Approaching final grasp pose from pre-grasp pose...")
