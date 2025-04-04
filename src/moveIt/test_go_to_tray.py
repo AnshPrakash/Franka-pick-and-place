@@ -22,8 +22,8 @@ def run_exp(config: Dict[str, Any]):
     files = glob.glob(os.path.join(object_root_path, "Ycb*"))
     obj_names = [file.split('/')[-1] for file in files]
     sim = Simulation(config, seed=13287)
-    for obj_name in obj_names:
-        for tstep in range(10):
+    for obj_name in obj_names[0:1]:
+        for tstep in range(1):
             sim.reset(obj_name)
             # print((f"Object: {obj_name}, Timestep: {tstep},"
             #        f" pose: {sim.get_ground_tuth_position_object}"))

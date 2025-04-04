@@ -32,7 +32,7 @@ class MoveIt:
         # Uniformly sample x in [-hx, hx] and y in [-hy, hy] on the top surface (z = hz)
         x_samples = np.random.uniform(-hx/2, 0, size=n_points)
         y_samples = np.random.uniform( 0, hy/2, size=n_points)
-        z_samples = np.random.uniform(hz, hz + 0.4, size=n_points)  # top surface in local coordinates
+        z_samples = np.random.uniform(hz + 0.2, hz + 0.4, size=n_points)  # top surface in local coordinates
         
         # Create an array of local points (in tray's coordinate system)
         points_local = np.vstack((x_samples, y_samples, z_samples)).T
@@ -66,7 +66,7 @@ class MoveIt:
         l_gripper = self.planner.C.getFrame("l_gripper")
         position_ry = l_gripper.getPosition()
         orientation_ry = l_gripper.getQuaternion()
-        # self.planner.C.view(True)
+        self.planner.C.view(True)
         result = self.moveTo(position_ry, orientation_ry, convert_ori_to_ry=False)
 
         return result
