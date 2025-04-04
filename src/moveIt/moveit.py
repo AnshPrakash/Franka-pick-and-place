@@ -2,7 +2,8 @@ import numpy as np
 
 from src.planning import Global_planner
 from src.simulation import Simulation
-
+import pybullet as p
+from scipy.spatial.transform import Rotation as R
 
 class MoveIt:
     """
@@ -14,6 +15,97 @@ class MoveIt:
         self.planner = Global_planner(sim)
     
 
+    def goal_sampler(self):
+        """
+            Sample goal position
+            Sample goal orientation
+        """
+        tray_pos, tray_ori = p.getBasePositionAndOrientation(self.sim.goal.id)
+        tray_id = self.sim.goal.id
+        collision_data = p.getCollisionShapeData(tray_id, -1)
+        tray_size = collision_data[0][3]  # Extracting halfExtents (for box shapes)
+        tray_size = np.array(tray_size)
+        hx, hy, hz = tray_size  # half extents along x, y, and z.
+
+        n_points = 100
+
+        # Uniformly sample x in [-hx, hx] and y in [-hy, hy] on the top surface (z = hz)
+        x_samples = np.random.uniform(-hx/2, 0, size=n_points)
+        y_samples = np.random.uniform( 0, hy/2, size=n_points)
+        z_samples = np.random.uniform(hz + 0.2, hz + 0.4, size=n_points)  # top surface in local coordinates
+        
+        # Create an array of local points (in tray's coordinate system)
+        points_local = np.vstack((x_samples, y_samples, z_samples)).T
+
+        # Convert the tray's quaternion (PyBullet format: [x, y, z, w]) to a rotation matrix
+        r = R.from_quat(tray_ori)
+        # Transform the local points to world coordinates:
+        # Apply rotation then translation.
+        points_world = r.apply(points_local) + np.array(tray_pos)
+        return points_world
+
+    @staticmethod
+    def get_pybullet_ee_ori(rai_orientation):
+        """
+        Convert a RAi configuration orientation quaternion (for the 'l_gripper' frame)
+        in [w, x, y, z] order to a PyBullet end-effector orientation quaternion in [x, y, z, w] order.
+        
+        Args:
+            rai_orientation: A quaternion from RAi in [w, x, y, z] order.
+            
+        Returns:
+            A quaternion in PyBullet convention ([x, y, z, w]).
+        """
+
+        # Convert the RAi quaternion [w, x, y, z] to PyBullet format [x, y, z, w]
+        q_pb_format = [rai_orientation[1], rai_orientation[2], rai_orientation[3], rai_orientation[0]]
+        
+        # Create a rotation object from this quaternion
+        r_rai = R.from_quat(q_pb_format)
+        
+        # Define the transformation matrix T that was used in the forward conversion:
+        # This matrix swaps the x and y axes and flips the z axis.
+        T = np.array([[0, 1, 0],
+                    [1, 0, 0],
+                    [0, 0, -1]])
+        T_rot = R.from_matrix(T)
+        
+        # Reverse the transformation:
+        # In the forward function we had: r = r_pb * T_rot,
+        # so to recover r_pb we compute: r_pb = r_rai * T_rot.inv()
+        r_pb = r_rai * T_rot.inv()
+        
+        # Get the resulting quaternion in PyBullet convention ([x, y, z, w])
+        q_pb = r_pb.as_quat()
+        return q_pb
+
+        
+    def go_to_tray(self):
+        """
+            Sample possible goal position
+            Move the EE to the goal
+        """
+        sampled_goals = self.goal_sampler()
+        q = None
+        
+        for goal_position in sampled_goals:
+            q = self.planner.compute_target_configuration(goal_position, target_ori=None)
+            if q is not None:
+                break
+        if q is None:
+            print("IK failed to compute a goal configuration after sampling.")
+            return False
+                
+        self.planner.C.setJointState(q)
+        l_gripper = self.planner.C.getFrame("l_gripper")
+        position = l_gripper.getPosition()
+        orientation_ry = l_gripper.getQuaternion()
+        orientation = self.get_pybullet_ee_ori(orientation_ry)
+        # self.planner.C.view(True)
+        result = self.moveTo(position, orientation)
+
+        return result
+        
     def moveToOld(self, goal_position, goal_ori, joint_space_crit=False):
         """
         Args:
@@ -138,7 +230,10 @@ class MoveIt:
         gp = self.planner
 
         # Get the target joint configuration
-        qT = self.planner.compute_target_configuration(goal_position, goal_ori)
+        qT = self.planner.compute_target_configuration( 
+                                                        goal_position,
+                                                        goal_ori
+                                        )
         if qT is None:
             print("IK failed to compute a goal configuration.")
             return False
