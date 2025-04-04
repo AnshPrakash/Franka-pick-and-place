@@ -93,7 +93,7 @@ class IKSolver:
         wall.setPosition(wall_pos)
         wall.setQuaternion(wall_ori)
         wall.setColor([0.5, 0.5, 0.5])
-        wall.setContact(0)
+        wall.setContact(1)
     
 
         # #DEBUG
@@ -192,13 +192,13 @@ class IKSolver:
 
 
 
-    def compute_target_configuration(self, target_pos, target_ori = None):
+    def compute_target_configuration(self, target_pos, target_ori = None, convert_ori_to_ry = True):
         """
            Compute the robot's joint configuration given the target end-effector
            position and orientation
         """
         # Convert target position and orientation to ry coordinate system
-        if target_ori is not None:
+        if target_ori is not None and  convert_ori_to_ry:
             target_ori = self.get_ry_ee_ori(target_ori)
         
         # Create a new frame for the debugging target
