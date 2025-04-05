@@ -106,7 +106,7 @@ class MoveIt:
 
         return result
         
-    def is_colliding(self, position):
+    def is_colliding(self, joint_config = None, position = None):
         """
             Check if the robot is colliding with any obstacles
             Args:
@@ -115,6 +115,12 @@ class MoveIt:
                 True: if colliding
                 False: if not colliding
         """
+        if position is None:
+            if joint_config is None:
+                raise ValueError("Either joint_config or position must be provided.")
+            self.planner.C.setJointState(joint_config)
+            l_gripper = self.planner.C.getFrame("l_gripper")
+            position, _ = l_gripper.getPosition(), l_gripper.getQuaternion()
         # Check for collision
         obstacles = self.planner.get_obstacles()
         margin  = 0.05  # margin for collision detection
@@ -262,7 +268,7 @@ class MoveIt:
                 
                 q = None
                 # Check if this possibly is colliding with any obstacles
-                if not self.is_colliding(target_pos):
+                if not self.is_colliding(position=target_pos):
                     # Use inverse kinematics to obtain a joint configuration that reaches target_pos.
                     q = self.planner.compute_target_configuration(target_pos)
                 
