@@ -17,8 +17,9 @@ class MoveIt:
 
     def goal_sampler(self):
         """
-            Sample goal position
-            Sample goal orientation
+            Return :
+                Sampled goal position
+                Sampled goal orientation
         """
         tray_pos, tray_ori = p.getBasePositionAndOrientation(self.sim.goal.id)
         tray_id = self.sim.goal.id
@@ -27,7 +28,7 @@ class MoveIt:
         tray_size = np.array(tray_size)
         hx, hy, hz = tray_size  # half extents along x, y, and z.
 
-        n_points = 100
+        n_points = 200
 
         # Uniformly sample x in [-hx, hx] and y in [-hy, hy] on the top surface (z = hz)
         x_samples = np.random.uniform(-hx/2, 0, size=n_points)
@@ -42,7 +43,24 @@ class MoveIt:
         # Transform the local points to world coordinates:
         # Apply rotation then translation.
         points_world = r.apply(points_local) + np.array(tray_pos)
-        return points_world
+
+        sampled_goals = points_world
+        
+        for goal_position in sampled_goals:
+            q = self.planner.compute_target_configuration(goal_position, target_ori=None)
+            if q is not None:
+                break
+        if q is None:
+            print("IK failed to compute a goal configuration after sampling.")
+            return None, None
+                
+        self.planner.C.setJointState(q)
+        l_gripper = self.planner.C.getFrame("l_gripper")
+        position = l_gripper.getPosition()
+        orientation_ry = l_gripper.getQuaternion()
+        orientation = self.get_pybullet_ee_ori(orientation_ry)
+
+        return position, orientation
 
     @staticmethod
     def get_pybullet_ee_ori(rai_orientation):
@@ -85,23 +103,11 @@ class MoveIt:
             Sample possible goal position
             Move the EE to the goal
         """
-        sampled_goals = self.goal_sampler()
-        q = None
-        
-        for goal_position in sampled_goals:
-            q = self.planner.compute_target_configuration(goal_position, target_ori=None)
-            if q is not None:
-                break
-        if q is None:
-            print("IK failed to compute a goal configuration after sampling.")
-            return False
-                
-        self.planner.C.setJointState(q)
-        l_gripper = self.planner.C.getFrame("l_gripper")
-        position = l_gripper.getPosition()
-        orientation_ry = l_gripper.getQuaternion()
-        orientation = self.get_pybullet_ee_ori(orientation_ry)
-        # self.planner.C.view(True)
+        position, orientation = self.goal_sampler()
+        while position is None:
+            print("No goal position found: Retrying...")
+            position, orientation = self.goal_sampler()
+
         result = self.moveTo(position, orientation)
 
         return result
@@ -123,7 +129,7 @@ class MoveIt:
             position, _ = l_gripper.getPosition(), l_gripper.getQuaternion()
         # Check for collision
         obstacles = self.planner.get_obstacles()
-        margin  = 0.05  # margin for collision detection
+        margin  = 0.08  # margin for collision detection
         for obstacle in obstacles:
             if obstacle is not None:
                 obstacle_pos, obstacle_size = obstacle
@@ -248,7 +254,7 @@ class MoveIt:
         # heuristic is to sample points from cube which are closer to the Robot body
         # So, choosing (+z ,-z), -y, -x directions
         ee_pos, _ = self.sim.robot.get_ee_pose()
-        size = 0.1
+        size = 0.2
         MAX_CUBE_SIZE = 1.0
         while size < MAX_CUBE_SIZE:
             # Max attempts for current cube size
@@ -266,6 +272,7 @@ class MoveIt:
                 offset = np.array([offset_x, offset_y, offset_z])
                 target_pos = ee_pos + offset
                 
+                self.planner.C.view(True)
                 q = None
                 # Check if this possibly is colliding with any obstacles
                 if not self.is_colliding(position=target_pos):
@@ -278,8 +285,60 @@ class MoveIt:
                     safe_pos, safe_ori = l_gripper.getPosition(), l_gripper.getQuaternion()
                     return q, safe_pos, safe_ori
             size = size * 1.2  # If no valid configuration found, increase the cube size
-        return None
+        return None, None, None
         
+    def backoff_strategy(self):
+        """
+            Move to a safer configuration to avoid collision
+            Returns:
+                q: joint configuration
+        """
+        # Sample a safe configuration
+        q, safe_pos, safe_ori = self.sample_safe_config()
+        if q is None:
+            print("No safe configuration found")
+            return None, None, None
+        else:
+            # Move to the safe configuration and hope EE doesn't collide
+            # with any obstacles
+            self.goTo(safe_pos, safe_ori)
+        MAX_WAIT_STEPS = 1000
+        retry = 0
+        for i in range(1,MAX_WAIT_STEPS + 1):
+            # dynamically check if the current robot configuration is safe
+            # update to new safe state
+            if self.is_colliding(position=safe_pos):
+                # Sample a new safe configuration
+                q, safe_pos, safe_ori = self.sample_safe_config()
+                if q is None:
+                    print("No safe configuration found")
+                    return None, None, None
+                else:
+                    # Move to the safe configuration and hope EE doesn't collide
+                    # with any obstacles
+                    self.goTo(safe_pos, safe_ori)
+            
+
+            # sample new goal position
+            if (i == 2**retry):
+                goal_position, goal_orientation = self.goal_sampler()
+            
+                path = self.planner.plan(goal_position, goal_orientation)
+                safe_path = False
+                if path is not None:
+                    for q in path:
+                        if self.is_colliding(joint_config=q):
+                            safe_path = True
+                            break
+                if safe_path:
+                    return path, goal_position, goal_orientation
+                retry += 1   
+            
+            self.sim.step()        
+        return None, None, None
+
+
+            
 
     def moveTo(self, goal_position, goal_ori, joint_space_crit=False):
         """
@@ -293,7 +352,7 @@ class MoveIt:
         """
 
         # HYPERPARAMETERS
-        replan_freq = 1
+        replan_freq = 5
         MAX_ITER = 100
         next_q_threshold = 0.5
         epsilon = 0.03  # for position/config change
@@ -380,10 +439,33 @@ class MoveIt:
                             break
                 if path is None:
                     q = fall_back_config
+                if self.is_colliding(joint_config=q):
+                    # Bring robot to a safe configuration
+                    # set a new goal and provides a replanned path
+                    print("We can collide Back off strategy is on")
+                    new_path, new_goal_position, new_goal_ori = self.backoff_strategy() # move to a safer configuration to avoid collision
+                    q = None
+                    if new_path is not None:
+                        # Move to the new goal position
+                        # TODO: refactor this repeated code
+                        initial_q = new_path[0]
+                        q = new_path[-1]
+                        fall_back_config = new_path[-1]
+                        goal_position = new_goal_position
+                        goal_ori = new_goal_ori
+                        for next_q in path[1:]:
+                            if np.linalg.norm(initial_q - next_q) > next_q_threshold:
+                                q = next_q
+                                break
+                    print("Recovery complete from backoff move towards goal again--")
+                    if q is None:
+                        # no safe configuration found 
+                        # Just keep moving forward even if it kills you 
+                        print("No safe configuration found -- Hope for the best")
+                        q = fall_back_config
                 self.sim.robot.position_control(q)
             self.sim.step()
             iter += 1
-
         return True
 
     def moveToSmooth(self, goal_position, goal_ori, joint_space_crit=False):

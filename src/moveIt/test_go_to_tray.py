@@ -42,7 +42,7 @@ def run_exp(config: Dict[str, Any]):
             # goal_pos = sim.goal.goal_pos
             # goal_pos = [goal_pos[0] - 0.1, goal_pos[1] - 0.1, goal_pos[2] +0.5 ] 
             # goal_ori = R.from_euler('xyz', [np.pi, 0, 0]).as_quat()
-            for i in range(200):
+            for i in range(300):
                 sim.step()
             motion = MoveIt(sim)
             motion.go_to_tray()
