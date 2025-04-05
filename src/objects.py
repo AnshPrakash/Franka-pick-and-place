@@ -152,11 +152,12 @@ class YCBObject:
     def __init__(self,
                  obj_name: str,
                  position: Tuple[float, float, float] = (1.0, 0, 1.31),
-                 orientation: Tuple[float, float, float] = (0, 0, 0)):
+                 orientation: Tuple[float, float, float] = (0, 0, 0),
+                 scaling: float = 1.5): # NOTE: changed, as we are allowed to change scale also to 1.0
         self.obj_name = obj_name
         self.pos = position
         self.ori = p.getQuaternionFromEuler(orientation)
-        scaling = 1.0  # 1.5 times normal
+        #scaling = 1.0  # 1.5 times normal
         object_root_path = ycb_objects.getDataPath()
         files = glob.glob(os.path.join(object_root_path, "Ycb*"))
         obj_names = [file.split('/')[-1] for file in files]

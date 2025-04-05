@@ -1,4 +1,5 @@
 import numpy as np
+import time
 
 from src.planning import Global_planner
 from src.simulation import Simulation
@@ -103,6 +104,7 @@ class MoveIt:
         orientation = self.get_pybullet_ee_ori(orientation_ry)
         # self.planner.C.view(True)
         result = self.moveTo(position, orientation)
+        time.sleep(1)
 
         return result
         
