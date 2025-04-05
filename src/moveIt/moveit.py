@@ -221,7 +221,7 @@ class MoveIt:
         """
 
         # HYPERPARAMETERS
-        replan_freq = 13
+        replan_freq = 1
         MAX_ITER = 100
         next_q_threshold = 0.5
         epsilon = 0.03  # for position/config change
@@ -241,7 +241,7 @@ class MoveIt:
 
         last_configuration = self.sim.robot.get_joint_positions()
         last_pos, last_ori = self.sim.robot.get_ee_pose()
-
+        fall_back_config = qT
         iter = 0
         for i in range(MAX_ITER):
             if i != 0 and i % check_new_config_freq == 0:
@@ -285,16 +285,29 @@ class MoveIt:
                 path = gp.plan(goal_position, goal_ori)
                 if path is None:
                     if i == 0:
-                        print("No path found")
-                        return False
-                    # if i not 0 we already moved the robot and hope its in a relatively close position
-                    return True
-                initial_q = path[0]
-                q = path[-1]
-                for next_q in path[1:]:
-                    if np.linalg.norm(initial_q - next_q) > next_q_threshold:
-                        q = next_q
-                        break
+                        # Trying multiple times beacause we have just grasped the object
+                        # and probably out of obstacles' paths
+                        MAX_ATTEMPTS = 10
+                        while path is None:
+                            for i in range(6):
+                                self.sim.step()
+                            path = gp.plan(goal_position, goal_ori)
+                            MAX_ATTEMPTS -= 1
+                            if MAX_ATTEMPTS == 0:
+                                break
+                        if path is None:
+                            print("No path found")
+                            return False
+                if path is not None:
+                    initial_q = path[0]
+                    q = path[-1]
+                    fall_back_config = path[-1]
+                    for next_q in path[1:]:
+                        if np.linalg.norm(initial_q - next_q) > next_q_threshold:
+                            q = next_q
+                            break
+                if path is None:
+                    q = fall_back_config
                 self.sim.robot.position_control(q)
             self.sim.step()
             iter += 1
