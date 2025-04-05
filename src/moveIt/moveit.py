@@ -1,4 +1,5 @@
 import numpy as np
+import time
 
 from src.planning import Global_planner
 from src.simulation import Simulation
@@ -103,6 +104,9 @@ class MoveIt:
         orientation = self.get_pybullet_ee_ori(orientation_ry)
         # self.planner.C.view(True)
         result = self.moveTo(position, orientation)
+        # some settling steps, because velocity of moved object still high
+        for i in range(20):
+            self.sim.step()
 
         return result
         

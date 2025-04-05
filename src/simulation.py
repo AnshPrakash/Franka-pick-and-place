@@ -8,6 +8,8 @@ from src.robot import Robot
 from src.objects import Obstacle, Table, Box, YCBObject, Goal
 from src.utils import pb_image_to_numpy
 
+import time
+
 
 class Simulation:
     """Simulation Class.
@@ -135,7 +137,9 @@ class Simulation:
             self.object = Box(position=self.initial_position)
         else:
             self.object = YCBObject(obj_name=self.target_object,
-                                    position=self.initial_position)
+                                    position=self.initial_position,
+                                    scaling=exp_settings["object_scale"][self.target_object]) # NOTE: changed because we are allowed to also use 1.0 scale
+        self.obstacles = []
         if self.obstacles_flag:
             self._add_obstacles()
 
@@ -193,6 +197,7 @@ class Simulation:
         return pb_image_to_numpy(rgb, depth, seg, self.width, self.height)
 
     def step(self):
+        time.sleep(1/240)
         collided_flag = False
 
         if p.getContactPoints(self.robot.id, self.wall):

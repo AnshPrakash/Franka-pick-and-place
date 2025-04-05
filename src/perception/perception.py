@@ -33,7 +33,9 @@ class Perception:
             'right': {'pos': (0, -0.35, 1.7), 'ori': (7 / 8 * np.pi, 0, 0)},  # initially 3/4 * np.pi
             'front': {'pos': (0.3, -0.55, 1.7), 'ori': (7 / 8 * np.pi, 0, -np.pi/2)},  # (7 / 8 * np.pi, 0, -np.pi / 2)
             'left': {'pos': (0, -0.65, 1.65), 'ori': (9 / 8 * np.pi, 0, 0)},  # initially 5/4 * np.pi
-            #'back': {'pos': (-0.3, -0.6, 1.6), 'ori': (7/8 * np.pi, 0, np.pi / 2)}  # (0, 3/4 * np.pi, 0)
+            # NOTE: here just as a fix to get to 'back' position => otherwise would say infeasible!
+            'mid_top': {'pos': (0, -0.5, 1.8), 'ori': (np.pi, 0, 0)},
+            'back': {'pos': (-0.25, -0.55, 1.7), 'ori': (7/8 * np.pi, 0, np.pi / 2)}  # (0, 3/4 * np.pi, 0)
 
         }
 
@@ -344,25 +346,26 @@ class Perception:
                                            key=lambda p: p[1][0])  # get max entry sorted by number of points in pcd
                 reference_pcd = max_entry[1]
                 pcd_collections.append(reference_pcd.points)
-                # construct view ordering (assuming that views are stored in order)
-                nb_views = len(ee_pcds)
-                if max_index == 0:
-                    # if first view is top just go in order
-                    view_order = list(range(nb_views))
-                else:
-                    # else, go in a circle and use top as last view
-                    view_order = list(range(max_index, nb_views)) + list(range(1, max_index)) + [0]
-                for i in view_order[1:]:  # skip first view as it is already added
-                    print(i)
-                    nb_points, pcd = ee_pcds[i]
-                    # current pcd is source as we want to transform it to the reference
-                    trans, failure = self.perceive(pcd, reference_pcd, flatten=False, visualize=True)
-                    if failure:
-                        continue
-                    pcd.transform(trans)
-                    # instead of combining later just enrich reference pcd each iteration
-                    pcd_collections.append(pcd.points)
-                    reference_pcd = pcd
+                # TODo: enable again the combining pointcloud strategy
+                # # construct view ordering (assuming that views are stored in order)
+                # nb_views = len(ee_pcds)
+                # if max_index == 0:
+                #     # if first view is top just go in order
+                #     view_order = list(range(nb_views))
+                # else:
+                #     # else, go in a circle and use top as last view
+                #     view_order = list(range(max_index, nb_views)) + list(range(1, max_index)) + [0]
+                # for i in view_order[1:]:  # skip first view as it is already added
+                #     print(i)
+                #     nb_points, pcd = ee_pcds[i]
+                #     # current pcd is source as we want to transform it to the reference
+                #     trans, failure = self.perceive(pcd, reference_pcd, flatten=False, visualize=False)
+                #     if failure:
+                #         continue
+                #     pcd.transform(trans)
+                #     # instead of combining later just enrich reference pcd each iteration
+                #     pcd_collections.append(pcd.points)
+                #     reference_pcd = pcd
 
                 # # This code was for choosing only pointcloud with most points as static reference and combining at the end
                 # ee_pcds.sort(key=lambda x: x[0], reverse=True)
