@@ -129,7 +129,7 @@ class MoveIt:
             position = l_gripper.getPosition()
         # Check for collision
         obstacles = self.planner.get_obstacles()
-        margin  = 0.08  # margin for collision detection
+        margin  = 0.1  # margin for collision detection
         for obstacle in obstacles:
             if obstacle is not None:
                 obstacle_pos, obstacle_size = obstacle
@@ -251,19 +251,18 @@ class MoveIt:
         """
 
         ### sample points which are more likely to be feasible
-        # heuristic is to sample points from cube which are closer to the Robot body
-        # So, choosing (+z ,-z), -y, -x directions
+        # heuristic is to sample points from a cube around EE
         ee_pos, _ = self.sim.robot.get_ee_pose()
-        size = 0.2
+        size = 0.3
         MAX_CUBE_SIZE = 1.0
         while size < MAX_CUBE_SIZE:
             # Max attempts for current cube size
-            MAX_ATTEMPTS = 10
+            MAX_ATTEMPTS = 50
             for i in range(MAX_ATTEMPTS):
                 # Sample a biased offset vector within the cube with a bias:
                 # For x and y: sample only negative offsets (closer to the robot body)
-                offset_x = np.random.uniform(-size/2, 0)
-                offset_y = np.random.uniform(-size/2, 0)
+                offset_x = np.random.uniform(-size/2, size/2)
+                offset_y = np.random.uniform(-size/2, -size/2)
                 
                 # For z: allow both positive and negative offsets
                 offset_z = np.random.uniform(-size/2, size/2)
@@ -272,7 +271,7 @@ class MoveIt:
                 offset = np.array([offset_x, offset_y, offset_z])
                 target_pos = ee_pos + offset
                 
-                self.planner.C.view(True)
+                # self.planner.C.view(True)
                 q = None
                 # Check if this possibly is colliding with any obstacles
                 if not self.is_colliding(position=target_pos):
@@ -304,7 +303,7 @@ class MoveIt:
             # with any obstacles
             self.goTo(safe_pos, safe_ori)
         MAX_WAIT_STEPS = 1000
-        retry = 0
+        retry_freq = 10
         for i in range(1,MAX_WAIT_STEPS + 1):
             # dynamically check if the current robot configuration is safe
             # update to new safe state
@@ -321,7 +320,7 @@ class MoveIt:
             
 
             # sample new goal position
-            if (i == 2**retry):
+            if (i%retry_freq == 0):
                 goal_position, goal_orientation = self.goal_sampler()
             
                 path = self.planner.plan(goal_position, goal_orientation)
@@ -333,9 +332,11 @@ class MoveIt:
                             break
                 if safe_path:
                     return path, goal_position, goal_orientation
-                retry += 1   
             
-            self.sim.step()        
+            # for faster simulation 
+            # trade-off with no collision-checking
+            for _ in range(4):
+                self.sim.step()        
         return None, None, None
 
 
@@ -353,7 +354,7 @@ class MoveIt:
         """
 
         # HYPERPARAMETERS
-        replan_freq = 5
+        replan_freq = 2
         MAX_ITER = 100
         next_q_threshold = 0.5
         epsilon = 0.03  # for position/config change
