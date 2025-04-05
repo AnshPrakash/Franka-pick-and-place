@@ -99,13 +99,22 @@ class Robot:
         ee_ori = ee_info[1]
         return np.asarray(ee_pos), np.asarray(ee_ori)
 
-    def position_control(self, target_positions):
-        p.setJointMotorControlArray(
-            self.id,
-            jointIndices=self.arm_idx,
-            controlMode=p.POSITION_CONTROL,
-            targetPositions=target_positions,
-        )
+    def position_control(self, target_positions, pos_gain=None):
+        if pos_gain is None:
+            p.setJointMotorControlArray(
+                self.id,
+                jointIndices=self.arm_idx,
+                controlMode=p.POSITION_CONTROL,
+                targetPositions=target_positions,
+            )
+        else:
+            p.setJointMotorControlArray(
+                self.id,
+                jointIndices=self.arm_idx,
+                controlMode=p.POSITION_CONTROL,
+                targetPositions=target_positions,
+                positionGains=[pos_gain] * len(self.arm_idx)
+            )
     def gripper_control(self, target_positions, forces=None):
         if forces is None:
             p.setJointMotorControlArray(

@@ -38,6 +38,18 @@ class Grasper(ABC):
         self.table_height = table_height
         self.finger_depth = finger_depth
 
+        # c = p.createConstraint(sim.robot.id,
+        #                        9,
+        #                        sim.robot.id,
+        #                        10,
+        #                        jointType=p.JOINT_GEAR,
+        #                        jointAxis=[1, 0, 0],
+        #                        parentFramePosition=[0, 0, 0],
+        #                        childFramePosition=[0, 0, 0])
+        # p.changeConstraint(c, gearRatio=-1, erp=0.5, maxForce=50)
+        # p.changeDynamics(sim.robot.id, 9, lateralFriction=1.5)
+        # p.changeDynamics(sim.robot.id, 10, lateralFriction=1.5)
+
     def get_object_data(self, obj_id):
         obj_data = p.getVisualShapeData(obj_id)
         mesh_file = obj_data[0][4].decode('utf-8')
@@ -106,7 +118,6 @@ class Grasper(ABC):
                 pose
             Move the EE to the best grasp pose and then grip the object
         """
-        self.close_gripper()
         if obj_id is None:
             obj_id = self.obj_id
         # Generate grasp candidates; assume get_grasps returns best grasp when best=True
@@ -156,7 +167,7 @@ class Grasper(ABC):
                 #                                 [  0.         ,  0.         ,  0.         ,  1.        ]])
 
                 # Define a safe offset (in meters) for the pre-grasp pose along the grasp approach direction.
-                safe_distance = 0.1
+                safe_distance = 0.15
 
                 # Assume that the approach direction is given by the third column (z-axis) of the rotation part.
                 approach_vector = final_grasp_pose[:3, 2]
@@ -232,7 +243,7 @@ class Grasper(ABC):
 
                 # --- Stage 4: Move to retreat grasp pose ---
                 print("Moving to retreat grasp pose...")
-                retreat_dis = 0.25 # a little higher to overcome the tray height
+                retreat_dis = 0.1
 
                 # either move up in z-axis with respect to world frame (best for side grasps, but also in general)
                 retreat_pose = final_grasp_pose.copy()
@@ -253,7 +264,7 @@ class Grasper(ABC):
                 self.motion_controller.goTo(retreat_position, retreat_orientation)
 
                 # simple check if grasp was successfull => check if gripper is fully closed (then no object inside)
-                threshold = 0.002
+                threshold = 0.0024
                 gripper_state = self.sim.robot.get_gripper_positions()
                 print(gripper_state)
                 if gripper_state[0] < threshold and gripper_state[1] < threshold:

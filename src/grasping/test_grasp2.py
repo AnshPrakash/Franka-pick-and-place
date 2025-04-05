@@ -37,14 +37,19 @@ def run_exp(config: Dict[str, Any]):
     # grasper = ImplicitGrasper('../../GIGA/data/models/giga_pile.pt')
 
     print(obj_names)
-    for obj_name in obj_names[7:8]:
+    for obj_name in obj_names[4:5]:
         try:
             # PERCEPTION
             target_init = True
-            for tstep in range(1):
+            for tstep in range(10):
                 sim.reset(obj_name)
                 print("Object name", obj_name)
+
+                # initialize or configure task objects
                 grasper = SampleGrasper(sim)
+                motion_controller = MoveIt(sim)
+                perception.set_controller(motion_controller)
+
                 # PERCEPTION: only init obstacles once and target after object switch
                 if obstacle_init:
                     perception.set_objects([obst.id for obst in sim.obstacles])
@@ -67,11 +72,6 @@ def run_exp(config: Dict[str, Any]):
                 ee_pos, ee_ori = sim.robot.get_ee_pose()
                 print(f"Robot End Effector Position: {ee_pos}")
                 print(f"Robot End Effector Orientation: {ee_ori}")
-
-                inverse_kinematics = IKSolver(sim)
-                motion_controller = MoveIt(sim)
-                perception.set_controller(motion_controller)
-                print(f"gripper info {p.getJointInfo(sim.robot.id, sim.robot.gripper_idx[0])}")
 
                 # # extract table height
                 # aabb_min, aabb_max = p.getAABB(sim.object.id)
@@ -97,7 +97,7 @@ def run_exp(config: Dict[str, Any]):
                     target_object_pcd = perception.get_pcd(sim.object.id, sim, use_static=False, use_ee=True, use_tsdf=False)
                     target_object_pos, failure = perception.perceive(sim.object.id, target_object_pcd, flatten=False,
                                                                      visualize=False)
-                    expected_grasp_pose = grasper.execute_grasp(target_object_pos, best=True, visualize=False, ref_pc=target_object_pcd, debugging=False)
+                    expected_grasp_pose = grasper.execute_grasp(target_object_pos, obj_id=sim.object.id, best=True, visualize=False, ref_pc=target_object_pcd, debugging=False)
 
                     iter += 1
 

@@ -103,9 +103,9 @@ class MoveIt:
         orientation_ry = l_gripper.getQuaternion()
         orientation = self.get_pybullet_ee_ori(orientation_ry)
         # self.planner.C.view(True)
-        result = self.moveTo(position, orientation)
+        result = self.moveTo(position, orientation, pos_gain=0.05)
         # some settling steps, because velocity of moved object still high
-        for i in range(20):
+        for i in range(25):
             self.sim.step()
 
         return result
@@ -213,7 +213,7 @@ class MoveIt:
                 break
         return True
 
-    def moveTo(self, goal_position, goal_ori, joint_space_crit=False):
+    def moveTo(self, goal_position, goal_ori, joint_space_crit=False, pos_gain=None):
         """
         Args:
             goal_position: Desired end-effector position.
@@ -299,7 +299,7 @@ class MoveIt:
                     if np.linalg.norm(initial_q - next_q) > next_q_threshold:
                         q = next_q
                         break
-                self.sim.robot.position_control(q)
+                self.sim.robot.position_control(q, pos_gain=pos_gain)
             self.sim.step()
             iter += 1
 
