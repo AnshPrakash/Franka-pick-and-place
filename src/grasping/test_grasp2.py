@@ -37,7 +37,7 @@ def run_exp(config: Dict[str, Any]):
     # grasper = ImplicitGrasper('../../GIGA/data/models/giga_pile.pt')
 
     print(obj_names)
-    for obj_name in obj_names:
+    for obj_name in obj_names[7:8]:
         try:
             # PERCEPTION
             target_init = True

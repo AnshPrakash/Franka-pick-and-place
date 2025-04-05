@@ -24,7 +24,7 @@ from src.utils import matrix_to_pose
 
 
 class Grasper(ABC):
-    def __init__(self, sim: Simulation, obj_id=-1 ):
+    def __init__(self, sim: Simulation, obj_id=-1, finger_depth=0.05, table_height=1.2):
         """Base constructor for the Grasper class.
         The ground truth mesh file can already be loaded if object id is provided."""
         self.obj_id = obj_id
@@ -35,7 +35,8 @@ class Grasper(ABC):
         if obj_id != -1:
             self.get_object_data(obj_id)
 
-        self.margin_distance = 0.035
+        self.table_height = table_height
+        self.finger_depth = finger_depth
 
     def get_object_data(self, obj_id):
         obj_data = p.getVisualShapeData(obj_id)
@@ -70,9 +71,10 @@ class Grasper(ABC):
         It uses POSITION_CONTROL to command the gripper joints to the target position and
         steps the simulation to let the gripper actuate.
         """
-        self.sim.robot.gripper_control([0.0, 0.0], forces=[1000, 1000])
+        self.sim.robot.gripper_control([0.0, 0.0])
+        # self.sim.robot.gripper_control([0.0, 0.0], forces=[1000, 1000])
         # Step the simulation a few hundred times to allow the gripper to close.
-        for _ in range(10):
+        for _ in range(25):
             self.sim.step()
 
         print("Gripper closed.")
@@ -93,7 +95,7 @@ class Grasper(ABC):
         
         self.sim.robot.gripper_control([0.1, 0.1])
         # Step the simulation a few hundred times to allow the gripper to close.
-        for _ in range(10):
+        for _ in range(25):
             self.sim.step()
         
         print("Gripper opened.")
@@ -104,6 +106,7 @@ class Grasper(ABC):
                 pose
             Move the EE to the best grasp pose and then grip the object
         """
+        self.close_gripper()
         if obj_id is None:
             obj_id = self.obj_id
         # Generate grasp candidates; assume get_grasps returns best grasp when best=True
@@ -120,8 +123,21 @@ class Grasper(ABC):
             try:
                 final_grasp_pose = grasp.pose.as_matrix()  # A 4x4 homogeneous transformation matrix
 
+                max_margin = 0.045
+                z_threshold = self.table_height + self.finger_depth + 0.015 # heuristic for minimal grasp height
                 approach_vector = final_grasp_pose[:3, 2]  # Extract the z-axis (approach vector)
-                final_grasp_pose[:3, 3] += self.margin_distance * approach_vector
+                current_z = final_grasp_pose[2, 3]
+                # final z value should not be below table height
+                if approach_vector[2] < 0:
+                    # Calculate the maximum allowed margin_distance such that the new z >= 1.2.
+                    allowed_margin = (current_z - z_threshold) / (-approach_vector[2])
+                    allowed_margin = max(0, allowed_margin)
+                    # Use the lesser of the two values.
+                    margin_distance = min(max_margin, allowed_margin)
+                else:
+                    margin_distance = max_margin
+
+                final_grasp_pose[:3, 3] += margin_distance * approach_vector
 
                 #DEBUGGGGGGGGG
                 # # In case IK Solver fails during interpolation
@@ -133,7 +149,7 @@ class Grasper(ABC):
                 #DEBUGGGGGGGG
 
 
-                print("Final grasp pose", final_grasp_pose)
+                #print("Final grasp pose", final_grasp_pose)
                 # final_grasp_pose  = np.array([  [  0.98896849 ,  0.12177069 , -0.08433993 , -0.13198916],
                 #                                 [  0.11063837 , -0.98583892 , -0.12601893 , -0.5525772 ],
                 #                                 [ -0.098491   ,  0.11529752 , -0.98843614 , 1.30148848],
@@ -237,7 +253,7 @@ class Grasper(ABC):
                 self.motion_controller.goTo(retreat_position, retreat_orientation)
 
                 # simple check if grasp was successfull => check if gripper is fully closed (then no object inside)
-                threshold = 0.003
+                threshold = 0.002
                 gripper_state = self.sim.robot.get_gripper_positions()
                 print(gripper_state)
                 if gripper_state[0] < threshold and gripper_state[1] < threshold:
@@ -389,13 +405,12 @@ class ImplicitGrasper(Grasper):
             return grasps, scores
 
 class SampleGrasper(Grasper):
-    def __init__(self, sim, obj_id=-1, num_grasps=15, max_num_samples=100, num_parallel_workers=5, finger_depth=0.05, table_height=1.2): # table height is hardcoded based on visualization
-        super().__init__(sim, obj_id)
+    def __init__(self, sim, obj_id=-1, num_grasps=15, max_num_samples=100, num_parallel_workers=5, finger_depth=0.05, table_height=1.2):
+        super().__init__(sim, obj_id, finger_depth, table_height)
         self.num_grasps = num_grasps
         self.max_num_samples = max_num_samples
         self.num_parallel_workers = num_parallel_workers
         self.finger_depth = finger_depth
-        self.table_height = table_height
 
         self.sampler = GpgGraspSamplerPcl(self.finger_depth-0.0075)
 
@@ -431,7 +446,7 @@ class SampleGrasper(Grasper):
             num_parallel=self.num_parallel_workers,
             num_grasps=self.num_grasps,
             max_num_samples=175,
-            safety_dis_above_table= self.table_height + self.margin_distance,
+            safety_dis_above_table= self.table_height + 0.005, # 0.005 also used in sample code
             show_final_grasps=False
         )
         if len(grasps) == 0:
