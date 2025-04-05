@@ -27,7 +27,10 @@ class MoveIt:
         tray_size = collision_data[0][3]  # Extracting halfExtents (for box shapes)
         tray_size = np.array(tray_size)
         hx, hy, hz = tray_size  # half extents along x, y, and z.
-
+        margin = 0.05
+        # avoid points close to border
+        hx = hx - margin
+        hy = hy - margin
         n_points = 200
 
         # Uniformly sample x in [-hx, hx] and y in [-hy, hy] on the top surface (z = hz)
