@@ -106,6 +106,28 @@ class MoveIt:
 
         return result
         
+    def is_colliding(self, position):
+        """
+            Check if the robot is colliding with any obstacles
+            Args:
+                position: Desired end-effector position.
+            Returns:
+                True: if colliding
+                False: if not colliding
+        """
+        # Check for collision
+        obstacles = self.planner.get_obstacles()
+        margin  = 0.05  # margin for collision detection
+        for obstacle in obstacles:
+            if obstacle is not None:
+                obstacle_pos, obstacle_size = obstacle
+                # Check if the robot is colliding with the obstacle
+                distance = np.linalg.norm(position - obstacle_pos)
+                if distance < obstacle_size + margin:
+                    print("Collision detected with obstacle at position:", obstacle_pos)
+                    return True
+        return False
+
     def moveToOld(self, goal_position, goal_ori, joint_space_crit=False):
         """
         Args:
@@ -208,6 +230,50 @@ class MoveIt:
                 print("Goal Achieved")
                 break
         return True
+    
+    def sample_safe_config(self):
+        """
+            Sample safe configuration about the EE position
+            Returns:
+                q: joint configuration
+        """
+
+        ### sample points which are more likely to be feasible
+        # heuristic is to sample points from cube which are closer to the Robot body
+        # So, choosing (+z ,-z), -y, -x directions
+        ee_pos, _ = self.sim.robot.get_ee_pose()
+        size = 0.1
+        MAX_CUBE_SIZE = 1.0
+        while size < MAX_CUBE_SIZE:
+            # Max attempts for current cube size
+            MAX_ATTEMPTS = 10
+            for i in range(MAX_ATTEMPTS):
+                # Sample a biased offset vector within the cube with a bias:
+                # For x and y: sample only negative offsets (closer to the robot body)
+                offset_x = np.random.uniform(-size/2, 0)
+                offset_y = np.random.uniform(-size/2, 0)
+                
+                # For z: allow both positive and negative offsets
+                offset_z = np.random.uniform(-size/2, size/2)
+                
+                # Create the offset vector and compute the target EE position
+                offset = np.array([offset_x, offset_y, offset_z])
+                target_pos = ee_pos + offset
+                
+                q = None
+                # Check if this possibly is colliding with any obstacles
+                if not self.is_colliding(target_pos):
+                    # Use inverse kinematics to obtain a joint configuration that reaches target_pos.
+                    q = self.planner.compute_target_configuration(target_pos)
+                
+                if q is not None:
+                    self.planner.C.setJointState(q)
+                    l_gripper = self.planner.C.getFrame("l_gripper")
+                    safe_pos, safe_ori = l_gripper.getPosition(), l_gripper.getQuaternion()
+                    return q, safe_pos, safe_ori
+            size = size * 1.2  # If no valid configuration found, increase the cube size
+        return None
+        
 
     def moveTo(self, goal_position, goal_ori, joint_space_crit=False):
         """
