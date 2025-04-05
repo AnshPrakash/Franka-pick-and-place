@@ -126,7 +126,7 @@ class MoveIt:
                 raise ValueError("Either joint_config or position must be provided.")
             self.planner.C.setJointState(joint_config)
             l_gripper = self.planner.C.getFrame("l_gripper")
-            position, _ = l_gripper.getPosition(), l_gripper.getQuaternion()
+            position = l_gripper.getPosition()
         # Check for collision
         obstacles = self.planner.get_obstacles()
         margin  = 0.08  # margin for collision detection
@@ -282,7 +282,8 @@ class MoveIt:
                 if q is not None:
                     self.planner.C.setJointState(q)
                     l_gripper = self.planner.C.getFrame("l_gripper")
-                    safe_pos, safe_ori = l_gripper.getPosition(), l_gripper.getQuaternion()
+                    safe_pos, safe_ori_ry = l_gripper.getPosition(), l_gripper.getQuaternion()
+                    safe_ori = self.get_pybullet_ee_ori(safe_ori_ry)                    
                     return q, safe_pos, safe_ori
             size = size * 1.2  # If no valid configuration found, increase the cube size
         return None, None, None
