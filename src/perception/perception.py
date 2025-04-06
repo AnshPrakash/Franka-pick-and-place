@@ -260,7 +260,7 @@ class Perception:
 
                 # move robot ee to desired positions
 
-                ret_val = self.motion_controller.moveTo(target_pos, target_ori)
+                ret_val = self.motion_controller.goTo(target_pos, target_ori)
                 if not ret_val:
                     continue
                 # q = p.calculateInverseKinematics(sim.robot.id, sim.robot.ee_idx, target_pos, target_ori)[:-2]

@@ -25,8 +25,6 @@ def run_experiment(args: argparse.ArgumentParser, config: Dict):
     print(f"Ycb object  {args.object}")
     print(f"Obstacles are {args.obstacles}")
     print(f"Recording: {args.record}")
-    print("Simulation Start:")
-    print(config['world_settings'], config['robot_settings'])
     object_root_path = ycb_objects.getDataPath()
     files = glob.glob(os.path.join(object_root_path, "Ycb*"))
     obj_names = [file.split('/')[-1] for file in files]
@@ -34,8 +32,12 @@ def run_experiment(args: argparse.ArgumentParser, config: Dict):
     recording  = args.record
     if ycb_object not in obj_names:
         raise ValueError("Wrong YcbObject")
-        
     
+    allow_obstacles = args.obstacles
+    config["world_settings"]["turn_on_obstacles"] = allow_obstacles
+
+    print(config['world_settings'], config['robot_settings'])
+    print("Simulation Start:")
     sim = Simulation(config, seed=42)
     try:
         if recording:
