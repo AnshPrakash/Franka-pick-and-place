@@ -459,7 +459,8 @@ class MoveIt:
         check_new_config_freq = 10
 
         gp = self.planner
-
+        if len(gp.obstacles_tracker) == 0:
+            replan_freq = 13
         # Get the target joint configuration
         qT = self.planner.compute_target_configuration( 
                                                         goal_position,
