@@ -57,12 +57,9 @@ def run_experiment(args: argparse.ArgumentParser, config: Dict):
     motion_controller = MoveIt(sim)
     perception.set_controller(motion_controller)
 
-    # Perception Stage
-    target_object_pcd = perception.get_pcd(sim.object.id, sim, use_static=False, use_ee=True, use_tsdf=False)
-    target_object_pos, failure = perception.perceive(sim.object.id, target_object_pcd, visualize=False)
     
 
-    # Grasping Stage
+    # Perception & Grasping Stage
     grasper = SampleGrasper(sim)
     iter = 0
     expected_grasp_pose = None
