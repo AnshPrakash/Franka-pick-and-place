@@ -7,6 +7,7 @@ import numpy as np
 from scipy.spatial.transform import Rotation as R
 
 from typing import Dict, Any
+import pybullet as p
 
 from pybullet_object_models import ycb_objects  # type:ignore
 
@@ -30,54 +31,75 @@ def run_experiment(args: argparse.ArgumentParser, config: Dict):
     files = glob.glob(os.path.join(object_root_path, "Ycb*"))
     obj_names = [file.split('/')[-1] for file in files]
     ycb_object = args.object
+    recording  = args.record
     if ycb_object not in obj_names:
-        print("Wrong YcbObject")
+        raise ValueError("Wrong YcbObject")
+        
+    
     sim = Simulation(config, seed=42)
+    try:
+        if recording:
+            # Check current connection info.
+            conn_info = p.getConnectionInfo()
+            if conn_info.get("connectionMethod", None) != p.GUI:
+                print("Recording requires GUI mode. Reconnecting in GUI mode...")
+                p.disconnect()
+                p.connect(p.GUI)
+            print("Start recording...")
+            log_id = p.startStateLogging(p.STATE_LOGGING_VIDEO_MP4, "simulation_recording.mp4")
 
-    # Set the object
-    sim.reset(ycb_object)
+
+        # Set the object
+        sim.reset(ycb_object)
 
 
-    # Let the object fall and stabalise
-    for i in range(200):
-        sim.step()
+        # Let the object fall and stabalise
+        for i in range(200):
+            sim.step()
 
-    # Setup Perception module
-    # PERCEPTION: initialize Perception class and load all necessary label meshes/pointclouds (atfer env has been reset the first time)
-    perception = Perception(camera_stats=config['world_settings']['camera'])
-    obstacle_init = True
-    target_init = True
-    if obstacle_init:
-        perception.set_objects([obst.id for obst in sim.obstacles])
-        obstacle_init = False
-    if target_init:
-        perception.set_objects(sim.object.id)
-        target_init = False
+        # Setup Perception module
+        # PERCEPTION: initialize Perception class and load all necessary label meshes/pointclouds (atfer env has been reset the first time)
+        perception = Perception(camera_stats=config['world_settings']['camera'])
+        grasper = SampleGrasper(sim)
+        obstacle_init = True
+        target_init = True
+        if obstacle_init:
+            perception.set_objects([obst.id for obst in sim.obstacles])
+            obstacle_init = False
+        if target_init:
+            perception.set_objects(sim.object.id)
+            grasper.get_object_data(sim.object.id)
+            target_init = False
 
-    motion_controller = MoveIt(sim)
-    perception.set_controller(motion_controller)
+        motion_controller = MoveIt(sim)
+        perception.set_controller(motion_controller)
 
-    
+        
 
-    # Perception & Grasping Stage
-    grasper = SampleGrasper(sim)
-    iter = 0
-    expected_grasp_pose = None
-    while expected_grasp_pose is None and iter < 5:
-        target_object_pcd = perception.get_pcd(sim.object.id, sim, use_static=False, use_ee=True, use_tsdf=False)
-        target_object_pos, failure = perception.perceive(sim.object.id, target_object_pcd, flatten=False,
-                                                            visualize=False)
-        expected_grasp_pose = grasper.execute_grasp(target_object_pos, best=True, visualize=False, ref_pc=target_object_pcd, debugging=False)
+        # Perception & Grasping Stage
+        iter = 0
+        expected_grasp_pose = None
+        while expected_grasp_pose is None and iter < 5:
+            target_object_pcd = perception.get_pcd(sim.object.id, sim, use_static=False, use_ee=True, use_tsdf=False)
+            target_object_pos, failure = perception.perceive(sim.object.id, target_object_pcd, flatten=False,
+                                                                visualize=False)
+            expected_grasp_pose = grasper.execute_grasp(target_object_pos, best=True, visualize=False, ref_pc=target_object_pcd, debugging=False)
 
-        iter += 1
-    
+            iter += 1
+        
 
-    # Path planning towards goal with obstacle avoidance
-    motion_controller.go_to_tray()
-    grasper.open_gripper()
+        # Path planning towards goal with obstacle avoidance
+        motion_controller.go_to_tray()
+        grasper.open_gripper()
 
-    print("Yay! We did it")
-    sim.close()
+        print("Yay! We did it")
+    finally:
+        if recording:
+            # Stop recording
+            p.stopStateLogging(log_id)
+            print("Stop recording")
+        print("Close simulation")
+        sim.close()
     
 
 if __name__ == "__main__":
