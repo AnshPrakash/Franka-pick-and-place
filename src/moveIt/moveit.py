@@ -171,7 +171,7 @@ class MoveIt:
                     # print("Collisions", C.getCollisions())
                     # info = C.eval(ry.FS.accumulatedCollisions, [])
                     # print("Info", info )
-                    C.view(True)
+                    # C.view(True)
                     return True
         return False
 
