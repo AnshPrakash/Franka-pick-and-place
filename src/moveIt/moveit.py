@@ -359,8 +359,7 @@ class MoveIt:
                 # Sample a biased offset vector within the cube with a bias:
                 # For x and y: sample only negative offsets (closer to the robot body)
                 offset_x = np.random.uniform(-size/2, size/2)
-                offset_y = np.random.uniform(-size/2, -size/2)
-                
+                offset_y = np.random.uniform(-size/2, size/2)
                 # For z: allow both positive and negative offsets
                 offset_z = np.random.uniform(-size/2, size/2)
                 
