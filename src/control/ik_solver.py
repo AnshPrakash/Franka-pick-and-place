@@ -18,8 +18,7 @@ class IKSolver:
 
         self.C = C
 
-
-
+        self.robot_frames = [frame.name for frame in C.getFrames()  if frame.name.startswith("l_") ]
         
         self._configure_ry()
         
@@ -110,18 +109,11 @@ class IKSolver:
         l_gripper.setShape(ry.ST.marker, [0.4])  # Adjust size as needed
         # print("Gripper position",  l_gripper.getPosition())
         # print("EE position", self.sim.robot.get_ee_pose()[0] )
+        # l_gripper.setShape(ry.ST.sphere,[0.1])
+        # self.C.view(True)
 
 
 
-        # frame = self.C.addFrame('pybullet-ee')
-        # ee_pos, ee_ori = self.sim.robot.get_ee_pose()
-        # frame.setShape(ry.ST.marker, [0.7])  # Adjust size as needed
-        # frame.setPosition(ee_pos)
-        # ee_ori = self.get_ry_ee_ori(ee_ori)
-        # # ee_ori = [ee_ori[3], ee_ori[0], ee_ori[1], ee_ori[2] ]
-        # frame.setQuaternion(ee_ori)  # [w, x, y, z] convention
-        
-        # print(l_gripper.getPose())
 
         
     def get_ry_ee_ori(self, orientation):
