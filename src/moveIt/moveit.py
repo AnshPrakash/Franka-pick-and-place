@@ -112,7 +112,7 @@ class MoveIt:
             print("No goal position found: Retrying...")
             position, orientation = self.goal_sampler()
 
-        result = self.moveTo(position, orientation)
+        result = self.moveTo(position, orientation, pos_gain=0.05)
         # some settling steps, because velocity of moved object still high
         for i in range(20):
             self.sim.step()
@@ -439,7 +439,7 @@ class MoveIt:
 
             
 
-    def moveTo(self, goal_position, goal_ori, joint_space_crit=False):
+    def moveTo(self, goal_position, goal_ori, joint_space_crit=False, pos_gain=None):
         """
         Args:
             goal_position: Desired end-effector position.
@@ -563,7 +563,7 @@ class MoveIt:
                         # Just keep moving forward even if it kills you 
                         print("No safe configuration found -- Hope for the best")
                         q = fall_back_config
-                self.sim.robot.position_control(q)
+                self.sim.robot.position_control(q, pos_gain=pos_gain)
             self.sim.step()
             iter += 1
         return True
