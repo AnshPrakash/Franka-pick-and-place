@@ -1,2 +1,18 @@
 # 1.5 scale objects: banana, scissor, pincers, jello pack, hammer, strawberry
-object_scale: [1.0, 1.0, 1.0, 1.5, 1.0, 1.0, 1.0, 1.5, 1.0, 1.0, 1.0, 1.5, 1.5, 1.5, 1.5, 1.0]
+object_scale:
+  YcbTennisBall: 1.0
+  YcbCrackerBox: 1.0
+  YcbPottedMeatCan: 1.0
+  YcbBanana: 1.5
+  YcbPear: 1.0
+  YcbPowerDrill: 1.0
+  YcbTomatoSoupCan: 1.0
+  YcbScissors: 1.5
+  YcbMustardBottle: 1.0
+  YcbChipsCan: 1.0
+  YcbMasterChefCan: 1.0
+  YcbMediumClamp: 1.5
+  YcbGelatinBox: 1.5
+  YcbHammer: 1.5
+  YcbStrawberry: 1.5
+  YcbFoamBrick: 1.0

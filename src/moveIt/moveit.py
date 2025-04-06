@@ -113,6 +113,9 @@ class MoveIt:
             position, orientation = self.goal_sampler()
 
         result = self.moveTo(position, orientation)
+        # some settling steps, because velocity of moved object still high
+        for i in range(20):
+            self.sim.step()
 
         return result
         
