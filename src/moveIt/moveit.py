@@ -1,9 +1,10 @@
 import numpy as np
+import pybullet as p
+import robotic as ry
+from scipy.spatial.transform import Rotation as R
 
 from src.planning import Global_planner
 from src.simulation import Simulation
-import pybullet as p
-from scipy.spatial.transform import Rotation as R
 
 class MoveIt:
     """
@@ -130,16 +131,47 @@ class MoveIt:
             self.planner.C.setJointState(joint_config)
             l_gripper = self.planner.C.getFrame("l_gripper")
             position = l_gripper.getPosition()
+        else:
+            q = self.planner.compute_target_configuration(position)
+            if q is None:
+                # infeasible configuration
+                return True
+            joint_config = q
+            self.planner.C.setJointState(joint_config)
         # Check for collision
+        # obstacles = self.planner.get_obstacles()
+        margin  = 0.02  # margin for collision detection
+        
+        
+        # update obstacle position
         obstacles = self.planner.get_obstacles()
-        margin  = 0.1  # margin for collision detection
-        for obstacle in obstacles:
-            if obstacle is not None:
-                obstacle_pos, obstacle_size = obstacle
-                # Check if the robot is colliding with the obstacle
-                distance = np.linalg.norm(position - obstacle_pos)
-                if distance < obstacle_size + margin:
-                    print("Collision detected with obstacle at position:", obstacle_pos)
+        obstacle_names = []
+        C = self.planner.C
+        for i, (pos, radius) in enumerate(obstacles):
+            obs_name = f"obstacle_{i}"
+            # Check if an obstacle frame already exists; if not, add it.
+            obs = C.getFrame(obs_name)
+            if obs is None:
+                obs = C.addFrame(obs_name)
+            # Use a sphere shape (not a marker) so it can be used for collision checking.
+            obs.setShape(ry.ST.sphere, [radius])
+            obs.setPosition(pos)
+            obs.setContact(1)
+            obs.setColor([1.0, 0.0, 0.0])  # Red for obstacles.
+            obstacle_names.append(obs_name)
+
+        # Check collision with the whole Robot
+        for obs_name in obstacle_names:
+            for robot_frame_name in self.planner.robot_frames:
+                d, _ = C.eval(ry.FS.negDistance, [robot_frame_name, obs_name])
+                if np.abs(d) < margin:
+                    print(f"Distance between {robot_frame_name} and {obs_name}: {d}")
+                    # C.computeCollisions()
+                    # penetration, _ = C.eval(ry.FS.accumulatedCollisions, [])
+                    # print("Collisions", C.getCollisions())
+                    # info = C.eval(ry.FS.accumulatedCollisions, [])
+                    # print("Info", info )
+                    C.view(True)
                     return True
         return False
 
@@ -246,6 +278,65 @@ class MoveIt:
                 break
         return True
     
+    def sample_safe_config_radial(self):
+        """
+        Sample a safe configuration by retracting the end-effector (EE) 
+        horizontally toward the robot base while keeping the EE height nearly constant 
+        (with a small random variation).
+        
+        Returns:
+            q: joint configuration,
+            safe_pos: final EE position,
+            safe_ori: final EE orientation
+        """
+
+        # Retrieve current end-effector and base poses
+        ee_pos, _ = self.sim.robot.get_ee_pose()      # ee_pos: [x, y, z]
+        base_pos = self.sim.robot.pos   # base_pos: [x, y, z]
+        
+        # Project positions onto horizontal plane (x-y) and compute radial vector
+        ee_xy = np.array([ee_pos[0], ee_pos[1]])
+        base_xy = np.array([base_pos[0], base_pos[1]])
+        radial_vector_xy = ee_xy - base_xy
+        norm_xy = np.linalg.norm(radial_vector_xy)
+        if norm_xy == 0:
+            return None, None, None  # avoid division by zero
+        rad_dir_xy = radial_vector_xy / norm_xy
+
+        # Define maximum retraction distance (e.g., up to 70% of the current horizontal distance)
+        max_retraction = 0.7 * norm_xy
+        MAX_ATTEMPTS = 20
+
+        for i in range(MAX_ATTEMPTS):
+            # Sample a random retraction distance along the horizontal direction
+            d = np.random.uniform(0, max_retraction)
+            # Compute new horizontal (x,y) position by retracting along the radial direction
+            target_xy = ee_xy - d * rad_dir_xy
+            
+            # For the z coordinate, keep it almost the same with a small random variation 
+            z_variation = np.random.uniform(-0.15, 0.15)
+            target_z = ee_pos[2] + z_variation
+            
+            # Form the new target position
+            target_pos = np.array([target_xy[0], target_xy[1], target_z])
+            
+            # Check for collisions at the target position
+            q = None
+            if not self.is_colliding(position=target_pos):
+                # Compute the candidate joint configuration using inverse kinematics
+                q = self.planner.compute_target_configuration(target_pos)
+            
+            if q is not None:
+                self.planner.C.setJointState(q)
+                l_gripper = self.planner.C.getFrame("l_gripper")
+                safe_pos, safe_ori_ry = l_gripper.getPosition(), l_gripper.getQuaternion()
+                safe_ori = self.get_pybullet_ee_ori(safe_ori_ry)
+                return q, safe_pos, safe_ori
+
+        return None, None, None
+
+
+
     def sample_safe_config(self):
         """
             Sample safe configuration about the EE position
@@ -256,11 +347,11 @@ class MoveIt:
         ### sample points which are more likely to be feasible
         # heuristic is to sample points from a cube around EE
         ee_pos, _ = self.sim.robot.get_ee_pose()
-        size = 0.3
+        size = 0.5
         MAX_CUBE_SIZE = 1.0
         while size < MAX_CUBE_SIZE:
             # Max attempts for current cube size
-            MAX_ATTEMPTS = 50
+            MAX_ATTEMPTS = 10
             for i in range(MAX_ATTEMPTS):
                 # Sample a biased offset vector within the cube with a bias:
                 # For x and y: sample only negative offsets (closer to the robot body)
@@ -297,7 +388,7 @@ class MoveIt:
                 q: joint configuration
         """
         # Sample a safe configuration
-        q, safe_pos, safe_ori = self.sample_safe_config()
+        q, safe_pos, safe_ori = self.sample_safe_config_radial()
         if q is None:
             print("No safe configuration found")
             return None, None, None
@@ -312,7 +403,7 @@ class MoveIt:
             # update to new safe state
             if self.is_colliding(position=safe_pos):
                 # Sample a new safe configuration
-                q, safe_pos, safe_ori = self.sample_safe_config()
+                q, safe_pos, safe_ori = self.sample_safe_config_radial()
                 if q is None:
                     print("No safe configuration found")
                     return None, None, None
@@ -327,14 +418,15 @@ class MoveIt:
                 goal_position, goal_orientation = self.goal_sampler()
             
                 path = self.planner.plan(goal_position, goal_orientation)
-                safe_path = False
+                # safe_path = False
                 if path is not None:
-                    for q in path:
-                        if self.is_colliding(joint_config=q):
-                            safe_path = True
-                            break
-                if safe_path:
                     return path, goal_position, goal_orientation
+                #     for q in path:
+                #         if self.is_colliding(joint_config=q):
+                #             safe_path = True
+                #             break
+                # if safe_path:
+                #     return path, goal_position, goal_orientation
             
             # for faster simulation 
             # trade-off with no collision-checking
