@@ -58,9 +58,9 @@ class Grasper(ABC):
         mesh.vertices = o3d.utility.Vector3dVector(
             np.asarray(mesh.vertices) * np.array(scaling))
         center = mesh.get_center()
-        print(f"Mesh Center Object {obj_id}: ", center)
+        #print(f"Mesh Center Object {obj_id}: ", center)
         mesh.translate(-center)
-        print(f"After translating center for Object {obj_id}: ", mesh.get_center())
+        #print(f"After translating center for Object {obj_id}: ", mesh.get_center())
 
         self.obj_mesh = mesh
         self.obj_id = obj_id
@@ -135,7 +135,7 @@ class Grasper(ABC):
                 final_grasp_pose = grasp.pose.as_matrix()  # A 4x4 homogeneous transformation matrix
 
                 max_margin = 0.045
-                z_threshold = self.table_height + self.finger_depth + 0.015 # heuristic for minimal grasp height
+                z_threshold = self.table_height + self.finger_depth # heuristic for minimal grasp height
                 approach_vector = final_grasp_pose[:3, 2]  # Extract the z-axis (approach vector)
                 current_z = final_grasp_pose[2, 3]
                 # final z value should not be below table height
@@ -277,7 +277,10 @@ class Grasper(ABC):
                     break
             except Exception as e:
                 print(f"Grasp {i + 1} failed: {e}")
-                continue
+                if i < max_retries:
+                    continue
+                else:
+                    return None
 
         print("Grasp executed successfully.")
         # return best_grasp
@@ -373,8 +376,6 @@ class ImplicitGrasper(Grasper):
         pc = gt_mesh.sample_points_poisson_disk(number_of_points=10000, init_factor=5) # in tutorial also pointcloud was inputted
         o3d.visualization.draw_geometries([pc])
         grasps, scores, timings = self.grasp_generator(state=argparse.Namespace(tsdf=tsdf_vol, pc=pc))
-        print(f"Grasps: {grasps}")
-        print(f"Scores: {scores}")
         if len(grasps) == 0:
             return None, None
 

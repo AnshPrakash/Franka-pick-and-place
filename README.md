@@ -29,6 +29,14 @@ Copy the file from src/control/panda_model/panda_irobman.g to ry.raiPath('scenar
 
 Note that you should check after the installation if pybullet is using numpy or not by running `pybullet.isNumpyEnabled()` in your code. Everything can still run without this too but it will be slow. You can also increase the speed of execution by choosing not to see the camera output in the GUI by toggling `cam_render_flag`. You will be able to still see the GUI but the cam output there will not be visible.
 
+## Experiments
+Our experiments can be recreated using the `launch.py` script. For our results we used the following runs:
+```shell
+python launch.py --all
+python launch.py --all --obstacles --steps 5
+python launch.py --object "YcbHammer" --obstacles
+```
+
 ## Codebase Structure
 
 ```shell

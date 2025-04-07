@@ -28,7 +28,7 @@ class MoveIt:
         tray_size = collision_data[0][3]  # Extracting halfExtents (for box shapes)
         tray_size = np.array(tray_size)
         hx, hy, hz = tray_size  # half extents along x, y, and z.
-        margin = 0.05
+        margin = 0.1
         # avoid points close to border
         hx = hx - margin
         hy = hy - margin
@@ -107,12 +107,21 @@ class MoveIt:
             Sample possible goal position
             Move the EE to the goal
         """
+        max_tries = 10
         position, orientation = self.goal_sampler()
-        while position is None:
+        for i in range(max_tries):
             print("No goal position found: Retrying...")
             position, orientation = self.goal_sampler()
+            if position is not None:
+                break
+        if position is None:
+            tray_pos, tray_ori = p.getBasePositionAndOrientation(self.sim.goal.id)
+            q = self.planner.compute_target_configuration(tray_pos, target_ori=None)
+            if q is None:
+                print("IK failed to compute a goal configuration.")
+                return None
 
-        result = self.moveTo(position, orientation, pos_gain=0.05)
+        result = self.moveTo(position, orientation, pos_gain=0.035)
         # some settling steps, because velocity of moved object still high
         for i in range(20):
             self.sim.step()
@@ -178,77 +187,6 @@ class MoveIt:
                     return True
         return False
 
-    def moveToOld(self, goal_position, goal_ori, joint_space_crit=False):
-        """
-        Args:
-            goal_position: Desired end-effector position.
-            goal_ori: Desired end-effector orientation in PyBullet quaternion format.
-        
-        Returns:
-            True: if goal pose possible and tries its best to EE without collision
-            False: if goal pose is not possible according to control module
-        """
-
-        replan_freq = 5  # hyperparameter
-        MAX_ITER = 50
-        gp = self.planner
-
-        # Get the target joint configuration
-        qT = self.planner.compute_target_configuration(goal_position, goal_ori)
-        if qT is None:
-            print("IK failed to compute a goal configuration.")
-            return False
-        qT = np.array(qT)
-
-        last_configuration = self.sim.robot.get_joint_positions()
-        last_pos, last_ori = self.sim.robot.get_ee_pose()
-
-        check_new_config_freq = 10
-        iter = 0
-        for i in range(MAX_ITER):
-            if i % replan_freq == 0:
-                path = gp.plan(goal_position, goal_ori)
-                skip_to_config = 10  # hyperparameter >= 1 [0 implies current congifuration]
-                if len(path) > skip_to_config:
-                    q = path[skip_to_config]
-                else:
-                    q = path[1]
-                self.sim.robot.position_control(q)
-            self.sim.step()
-            iter += 1
-
-            if joint_space_crit:
-                epsilon = 0.03  # hyperparameter
-                # Check goal pose achieved
-                robot_joint_config = self.sim.robot.get_joint_positions()
-                # joint_velocities = self.sim.robot.get_joint_velocites()
-                # max_abs_diff = np.max(np.abs(robot_joint_config - qT))
-                # config_norm = np.linalg.norm(robot_joint_config - qT)
-                # velocity_norm = np.linalg.norm(joint_velocities)
-                # print("ITER:", iter)
-                # print("MAX ABS DIFF: ", max_abs_diff)
-                # print("Config NORM: ", config_norm)
-                # print("Velocity Norm: ", velocity_norm)
-                if i != 0 and i % check_new_config_freq == 0:
-                    delta_config = np.abs(robot_joint_config - last_configuration)
-                    last_configuration = robot_joint_config
-                    print("Change in config", delta_config)
-                    if (np.max(delta_config) < epsilon):
-                        print(
-                            f"Configuration Achieved: No big change in joint configuration in last {check_new_config_freq} steps")
-                        break
-                # print("================")
-            else:
-                espilon = 0.03
-                curr_pos, curr_ori = self.sim.robot.get_ee_pose()
-                if i != 0 and i % check_new_config_freq == 0:
-                    if (np.linalg.norm(curr_pos - last_pos) < espilon and
-                            np.linalg.norm(curr_ori - last_ori) < espilon):
-                        print(i)
-                        break
-                    last_pos, last_ori = curr_pos, curr_ori
-
-        return True
 
     def goTo(self, goal_position, goal_ori):
         """
@@ -451,8 +389,8 @@ class MoveIt:
         """
 
         # HYPERPARAMETERS
-        replan_freq = 2
-        MAX_ITER = 100
+        replan_freq = 5
+        MAX_ITER = 500
         next_q_threshold = 0.5
         epsilon = 0.03  # for position/config change
         check_new_config_freq = 10
@@ -505,7 +443,7 @@ class MoveIt:
                             np.linalg.norm(curr_ori - goal_ori) < epsilon):
                         print(f"Goal Achieved")
                         break
-                    if (np.linalg.norm(curr_pos - last_pos) < epsilon and
+                    if (np.linalg.norm(curr_pos - last_pos) < epsilon / 3 and
                             np.linalg.norm(curr_ori - last_ori) < epsilon):
                         print(
                             f"Position Achieved: No big change in position in last {check_new_config_freq} steps")
@@ -568,10 +506,8 @@ class MoveIt:
             iter += 1
         return True
 
-    def moveToSmooth(self, goal_position, goal_ori, joint_space_crit=False):
+    def moveToSmooth(self, goal_position, goal_ori, joint_space_crit=False, pos_gain=None):
         """
-        Instead of using a fixed point within the RRT plan for a defined number of steps before replanning, update the
-        waypoint to the next point in the RRT plan if the distance is lower than a threshold and we are not replanning yet.
         Args:
             goal_position: Desired end-effector position.
             goal_ori: Desired end-effector orientation in PyBullet quaternion format.
@@ -582,16 +518,17 @@ class MoveIt:
         """
 
         # HYPERPARAMETERS
-        replan_freq = 20
-        MAX_ITER = 100
-        next_q_threshold = 1.0
+        MAX_ITER = 1000
+        next_q_threshold = 0.5
         epsilon = 0.03  # for position/config change
-        check_new_config_freq = 10
+        check_new_config_freq = 5
 
         gp = self.planner
-
         # Get the target joint configuration
-        qT = self.planner.compute_target_configuration(goal_position, goal_ori)
+        qT = self.planner.compute_target_configuration(
+            goal_position,
+            goal_ori
+        )
         if qT is None:
             print("IK failed to compute a goal configuration.")
             return False
@@ -599,28 +536,49 @@ class MoveIt:
 
         last_configuration = self.sim.robot.get_joint_positions()
         last_pos, last_ori = self.sim.robot.get_ee_pose()
+        fall_back_config = qT
+        waypoint = None  # index for current waypoint q
 
-        # initialize important variables
-        replan_counter = 0 # initially we need to plan
-        path = None
-        waypoint = None # index for current waypoint q
-        q = None
+        # initially plan
+
+        path = gp.plan(goal_position, goal_ori)
+        # Trying multiple times beacause we have just grasped the object
+        # and probably out of obstacles' paths
+        MAX_ATTEMPTS = 10
+        while path is None:
+            for i in range(6):
+                self.sim.step()
+            path = gp.plan(goal_position, goal_ori)
+            MAX_ATTEMPTS -= 1
+            if MAX_ATTEMPTS == 0:
+                break
+        if path is None:
+            print("No path found")
+            return False
+        if path is not None:
+            initial_q = path[0]
+            q = path[-1]
+            waypoint = len(path) - 1
+            fall_back_config = path[-1]
+            for idx, next_q in enumerate(path[1:]):
+                if np.linalg.norm(initial_q - next_q) > next_q_threshold:
+                    q = next_q
+                    waypoint = idx + 1
+                    break
+        else:
+            q = fall_back_config
+
+        self.sim.robot.position_control(q, pos_gain=pos_gain)
+
         for i in range(MAX_ITER):
-            robot_joint_config = self.sim.robot.get_joint_positions()
-            curr_pos, curr_ori = self.sim.robot.get_ee_pose()
-
+            if i == MAX_ITER - 1:
+                print("max iter reached")
+            # check iteratively if (sub-)goals are reached and if collision detected
             if i != 0 and i % check_new_config_freq == 0:
+                robot_joint_config = self.sim.robot.get_joint_positions()
+                curr_pos, curr_ori = self.sim.robot.get_ee_pose()
                 if joint_space_crit:
                     # Check goal pose achieved
-
-                    # joint_velocities = self.sim.robot.get_joint_velocites()
-                    # max_abs_diff = np.max(np.abs(robot_joint_config - qT))
-                    # config_norm = np.linalg.norm(robot_joint_config - qT)
-                    # velocity_norm = np.linalg.norm(joint_velocities)
-                    # print("ITER:", iter)
-                    # print("MAX ABS DIFF: ", max_abs_diff)
-                    # print("Config NORM: ", config_norm)
-                    # print("Velocity Norm: ", velocity_norm)
                     delta_config = np.linalg.norm(robot_joint_config - last_configuration)
                     delta_goal = np.linalg.norm(qT - robot_joint_config)
                     last_configuration = robot_joint_config
@@ -638,54 +596,72 @@ class MoveIt:
                             np.linalg.norm(curr_ori - goal_ori) < epsilon):
                         print(f"Goal Achieved")
                         break
-                    if (np.linalg.norm(curr_pos - last_pos) < epsilon and
-                            np.linalg.norm(curr_ori - last_ori) < epsilon):
-                        print(
-                            f"Position Achieved: No big change in position in last {check_new_config_freq} steps")
-                        break
-                    last_pos, last_ori = curr_pos, curr_ori
+                    # if (np.linalg.norm(curr_pos - last_pos) < epsilon / 4 and
+                    #         np.linalg.norm(curr_ori - last_ori) < epsilon):
+                    #     print(
+                    #         f"Position Achieved: No big change in position in last {check_new_config_freq} steps")
+                    #     break
+                    # last_pos, last_ori = curr_pos, curr_ori
 
-            if replan_counter == 0:
-                replan_counter = replan_freq
-                path = gp.plan(goal_position, goal_ori)
-                if path is None:
-                    if i == 0:
-                        print("No path found")
-                        return False
-                    # if i not 0 we already moved the robot and hope its in a relatively close position
-                    return True
-                initial_q = path[0]
-                q = path[-1]
-                waypoint = len(path) - 1
-                for idx, next_q in enumerate(path[1:]):
-                    if np.linalg.norm(initial_q - next_q) > next_q_threshold:
-                        q = next_q
-                        waypoint = idx + 1
-                        break
-                self.sim.robot.position_control(q)
+                # after goal checking, check if next configuration is reached
+                if np.linalg.norm(q - robot_joint_config) < epsilon:
+                    # update to next waypoint
+                    if waypoint < len(path) - 1:
+                        initial_q = path[waypoint]
+                        q = path[-1]
+                        new_waypoint = len(path) - 1
+                        for idx, next_q in enumerate(path[waypoint + 1:]):
+                            if np.linalg.norm(initial_q - next_q) > next_q_threshold:
+                                q = next_q
+                                new_waypoint = idx + waypoint + 1
+                                break
+                        waypoint = new_waypoint
+                        print(waypoint)
+                    else:
+                        # reached last waypoint and goal not reached => replan (not sure if this case can occur)
+                        path = gp.plan(goal_position, goal_ori)
+                        if path is not None:
+                            initial_q = path[0]
+                            q = path[-1]
+                            waypoint = len(path) - 1
+                            fall_back_config = path[-1]
+                            for idx, next_q in enumerate(path[1:]):
+                                if np.linalg.norm(initial_q - next_q) > next_q_threshold:
+                                    q = next_q
+                                    waypoint = idx + 1
+                                    break
+                        else:
+                            q = fall_back_config
+
+                # lastly check collision with next goal configuration
+
+                if self.is_colliding(joint_config=q):
+                    # Bring robot to a safe configuration
+                    # set a new goal and provides a replanned path
+                    print("We can collide Back off strategy is on")
+                    new_path, new_goal_position, new_goal_ori = self.backoff_strategy()  # move to a safer configuration to avoid collision
+                    q = None
+                    if new_path is not None:
+                        # Move to the new goal position
+                        # TODO: refactor this repeated code
+                        initial_q = new_path[0]
+                        q = new_path[-1]
+                        fall_back_config = new_path[-1]
+                        goal_position = new_goal_position
+                        goal_ori = new_goal_ori
+                        waypoint = len(path) - 1
+                        for idx, next_q in enumerate(path[1:]):
+                            if np.linalg.norm(initial_q - next_q) > next_q_threshold:
+                                q = next_q
+                                waypoint = idx + 1
+                                break
+                    print("Recovery complete from backoff move towards goal again--")
+                    if q is None:
+                        # no safe configuration found
+                        # Just keep moving forward even if it kills you
+                        print("No safe configuration found -- Hope for the best")
+                        q = fall_back_config
+
+                self.sim.robot.position_control(q, pos_gain=pos_gain)
             self.sim.step()
-
-            # at the end (to ensure waypoint is initialized) check if path waypoint is already reached
-            if np.linalg.norm(q - robot_joint_config) < epsilon:
-                # update to next waypoint
-                if waypoint < len(path) - 1:
-                    initial_q = path[waypoint]
-                    q = path[-1]
-                    waypoint = len(path) - 1
-                    for idx, next_q in enumerate(path[waypoint + 1:]):
-                        if np.linalg.norm(initial_q - next_q) > next_q_threshold:
-                            q = next_q
-                            waypoint = idx + waypoint + 1
-                            break
-                    self.sim.robot.position_control(q)
-                # if last waypoint is reached check again for goal, otherwise replan earlier
-                else:
-                    if (np.linalg.norm(curr_pos - goal_position) < epsilon and
-                            np.linalg.norm(curr_ori - goal_ori) < epsilon):
-                        print(f"Goal Achieved")
-                        break
-                    replan_counter = 1 # 1 because it is subtracted at the end of the loop
-
-            replan_counter -= 1
-
         return True
