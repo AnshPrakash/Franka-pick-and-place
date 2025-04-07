@@ -302,8 +302,6 @@ class GpgGraspSamplerPcl():
         potential_grasps: list of generated grasps
         """
         num_parallel_jobs = num_parallel
-        print(f"Starting prints for sampling....")
-        print("\n\n\n")
         # get all surface points
         # NOTE: For a dense point cloud, use voxel grid downsampling to reduce the number of points beforehand
         all_points = np.asarray(point_cloud.points)

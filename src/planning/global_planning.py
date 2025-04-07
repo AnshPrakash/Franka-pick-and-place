@@ -53,8 +53,8 @@ class Global_planner(IKSolver):
 
         # 2. Get the current robot configuration (q0)
         q0 = self.sim.robot.get_joint_positions()
-        print("Start configuration (q0):", q0)
-        print("Goal configuration (qT):", qT)
+        #print("Start configuration (q0):", q0)
+        #print("Goal configuration (qT):", qT)
 
         # 3. Add obstacles to the configuration as proper collision objects.
         #    get_obstacles() returns a list of (position, radius) tuples.
@@ -96,7 +96,7 @@ class Global_planner(IKSolver):
 
         # 7. Retrieve the resampled path.
         path = ret.x
-        print("Path found with", path.shape[0], "configurations.")
+        #print("Path found with", path.shape[0], "configurations.")
 
         # Visualize the planned path.
         # import time

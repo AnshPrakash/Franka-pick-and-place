@@ -28,7 +28,7 @@ class MoveIt:
         tray_size = collision_data[0][3]  # Extracting halfExtents (for box shapes)
         tray_size = np.array(tray_size)
         hx, hy, hz = tray_size  # half extents along x, y, and z.
-        margin = 0.05
+        margin = 0.1
         # avoid points close to border
         hx = hx - margin
         hy = hy - margin
@@ -107,12 +107,21 @@ class MoveIt:
             Sample possible goal position
             Move the EE to the goal
         """
+        max_tries = 10
         position, orientation = self.goal_sampler()
-        while position is None:
+        for i in range(max_tries):
             print("No goal position found: Retrying...")
             position, orientation = self.goal_sampler()
+            if position is not None:
+                break
+        if position is None:
+            tray_pos, tray_ori = p.getBasePositionAndOrientation(self.sim.goal.id)
+            q = self.planner.compute_target_configuration(tray_pos, target_ori=None)
+            if q is None:
+                print("IK failed to compute a goal configuration.")
+                return None
 
-        result = self.moveTo(position, orientation, pos_gain=0.05)
+        result = self.moveTo(position, orientation, pos_gain=0.035)
         # some settling steps, because velocity of moved object still high
         for i in range(20):
             self.sim.step()
@@ -178,77 +187,6 @@ class MoveIt:
                     return True
         return False
 
-    def moveToOld(self, goal_position, goal_ori, joint_space_crit=False):
-        """
-        Args:
-            goal_position: Desired end-effector position.
-            goal_ori: Desired end-effector orientation in PyBullet quaternion format.
-        
-        Returns:
-            True: if goal pose possible and tries its best to EE without collision
-            False: if goal pose is not possible according to control module
-        """
-
-        replan_freq = 5  # hyperparameter
-        MAX_ITER = 50
-        gp = self.planner
-
-        # Get the target joint configuration
-        qT = self.planner.compute_target_configuration(goal_position, goal_ori)
-        if qT is None:
-            print("IK failed to compute a goal configuration.")
-            return False
-        qT = np.array(qT)
-
-        last_configuration = self.sim.robot.get_joint_positions()
-        last_pos, last_ori = self.sim.robot.get_ee_pose()
-
-        check_new_config_freq = 10
-        iter = 0
-        for i in range(MAX_ITER):
-            if i % replan_freq == 0:
-                path = gp.plan(goal_position, goal_ori)
-                skip_to_config = 10  # hyperparameter >= 1 [0 implies current congifuration]
-                if len(path) > skip_to_config:
-                    q = path[skip_to_config]
-                else:
-                    q = path[1]
-                self.sim.robot.position_control(q)
-            self.sim.step()
-            iter += 1
-
-            if joint_space_crit:
-                epsilon = 0.03  # hyperparameter
-                # Check goal pose achieved
-                robot_joint_config = self.sim.robot.get_joint_positions()
-                # joint_velocities = self.sim.robot.get_joint_velocites()
-                # max_abs_diff = np.max(np.abs(robot_joint_config - qT))
-                # config_norm = np.linalg.norm(robot_joint_config - qT)
-                # velocity_norm = np.linalg.norm(joint_velocities)
-                # print("ITER:", iter)
-                # print("MAX ABS DIFF: ", max_abs_diff)
-                # print("Config NORM: ", config_norm)
-                # print("Velocity Norm: ", velocity_norm)
-                if i != 0 and i % check_new_config_freq == 0:
-                    delta_config = np.abs(robot_joint_config - last_configuration)
-                    last_configuration = robot_joint_config
-                    print("Change in config", delta_config)
-                    if (np.max(delta_config) < epsilon):
-                        print(
-                            f"Configuration Achieved: No big change in joint configuration in last {check_new_config_freq} steps")
-                        break
-                # print("================")
-            else:
-                espilon = 0.03
-                curr_pos, curr_ori = self.sim.robot.get_ee_pose()
-                if i != 0 and i % check_new_config_freq == 0:
-                    if (np.linalg.norm(curr_pos - last_pos) < espilon and
-                            np.linalg.norm(curr_ori - last_ori) < espilon):
-                        print(i)
-                        break
-                    last_pos, last_ori = curr_pos, curr_ori
-
-        return True
 
     def goTo(self, goal_position, goal_ori):
         """
@@ -451,8 +389,8 @@ class MoveIt:
         """
 
         # HYPERPARAMETERS
-        replan_freq = 2
-        MAX_ITER = 100
+        replan_freq = 5
+        MAX_ITER = 500
         next_q_threshold = 0.5
         epsilon = 0.03  # for position/config change
         check_new_config_freq = 10
@@ -505,7 +443,7 @@ class MoveIt:
                             np.linalg.norm(curr_ori - goal_ori) < epsilon):
                         print(f"Goal Achieved")
                         break
-                    if (np.linalg.norm(curr_pos - last_pos) < epsilon and
+                    if (np.linalg.norm(curr_pos - last_pos) < epsilon / 3 and
                             np.linalg.norm(curr_ori - last_ori) < epsilon):
                         print(
                             f"Position Achieved: No big change in position in last {check_new_config_freq} steps")

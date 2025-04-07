@@ -111,8 +111,8 @@ class Track:
         estimated_postion = estimated_state[[0, 2, 4]].flatten()
         # print("Estimated Position with Kalman Filter:", estimated_postion)
         self.prev_position = estimated_postion
-        print("Measurement ", measurement)
-        print("Estimated postion", estimated_postion)
+        #print("Measurement ", measurement)
+        #print("Estimated postion", estimated_postion)
         return estimated_postion
 
     

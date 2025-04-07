@@ -23,11 +23,6 @@ class Perception:
         self.retries = retries
 
         self.object_views = {
-            # 'top': {'pos': (0, -0.6, 1.8), 'ori': (np.pi, 0, 0)},
-            # 'right': {'pos': (0, -0.3, 1.72), 'ori': (7/8 * np.pi, 0, 0)}, # initially 3/4 * np.pi
-            # 'front': {'pos': (0.4, -0.6, 1.72), 'ori': (7 / 8 * np.pi, 0, -np.pi / 2)},  # (0, -3/4 * np.pi, 0)
-            # 'left': {'pos': (0, -0.9, 1.72), 'ori': (9/8 * np.pi, 0, 0)}, # initially 5/4 * np.pi
-            # # 'back': {'pos': (-0.4, -0.6, 1.72), 'ori': (7/8 * np.pi, 0, np.pi / 2)}  # (0, 3/4 * np.pi, 0)
 
             'top': {'pos': (0, -0.5, 1.8), 'ori': (np.pi, 0, 0)},
             'right': {'pos': (0, -0.35, 1.7), 'ori': (7 / 8 * np.pi, 0, 0)},  # initially 3/4 * np.pi
@@ -246,12 +241,7 @@ class Perception:
             pcd_collections.append(static_pcd)
         # then endeffector
         if use_ee:
-            # pos_threshold = 0.19
-            # ori_threshold = 0.19
             scene_data = []
-            # NOTE!!!: for a lower threshold (0.004) the sim.step() function is called very often and causes the simulation
-            # in the next object iteration to crash due to lost physics server connection (just limiting steps to 25 also did work)
-            change_threshold = 0.01
             stored_trans = self.initial_translation
             self.initial_translation = False
             for view, view_params in self.object_views.items():
@@ -263,35 +253,10 @@ class Perception:
                 ret_val = self.motion_controller.goTo(target_pos, target_ori)
                 if not ret_val:
                     continue
-                # q = p.calculateInverseKinematics(sim.robot.id, sim.robot.ee_idx, target_pos, target_ori)[:-2]
-                # # if solution is not found /infeasible just skip
-                # if q is None:
-                #     print("View skipped due to infeasible IK solution...")
-                #     continue
-                # sim.robot.position_control(q)
-                # sim.step()
-                # last_pos, last_ori = target_pos, target_ori
-                # curr_pos, curr_ori = sim.robot.get_ee_pose()
-                # # adjust ee until position and orientation change below some threshold
-                # while (np.linalg.norm(curr_pos - last_pos) > change_threshold or
-                #        np.linalg.norm(curr_ori - last_ori) > change_threshold):
-                #     sim.robot.position_control(q)
-                #     sim.step()
-                #     last_pos, last_ori = curr_pos, curr_ori
-                #     curr_pos, curr_ori = sim.robot.get_ee_pose()
-                #     # print(f"View {view}, Pos change:", np.linalg.norm(curr_pos - last_pos))
-                #     # print(f"View {view}, Ori change:", np.linalg.norm(curr_ori - last_ori))
-                print(f"View {view}, Final Pos error:", np.linalg.norm(sim.robot.get_ee_pose()[0] - target_pos))
-                print(f"View {view}, Final Ori error", np.linalg.norm(sim.robot.get_ee_pose()[1] - target_ori))
 
                 # get the new depth image and add pointcloud
                 rgb, depth, seg = sim.get_ee_renders()
                 pos, ori = sim.robot.get_ee_pose()
-                # import time
-                # time.sleep(10)
-
-                print(f"View {view}, Robot End Effector Position: {pos}")
-                print(f"View {view}, Robot End Effector Orientation: {R.from_quat(ori).as_euler('xyz')}")
 
                 # append current scene information
                 scene_data.append({'color': rgb, 'depth': depth, 'view_matrix': get_robot_view_matrix(pos, ori), 'seg': seg})
@@ -346,7 +311,7 @@ class Perception:
                                            key=lambda p: p[1][0])  # get max entry sorted by number of points in pcd
                 reference_pcd = max_entry[1]
                 pcd_collections.append(reference_pcd.points)
-                # TODo: enable again the combining pointcloud strategy
+                # TODo: enable again the combining pointcloud strategy if necessary
                 # # construct view ordering (assuming that views are stored in order)
                 # nb_views = len(ee_pcds)
                 # if max_index == 0:
@@ -454,7 +419,7 @@ class Perception:
             return points
 
 
-    """Functions (adjusted from ChatGPT) for using TSDF integration for Pointcloud extraction"""
+    """Functions for using TSDF integration for Pointcloud extraction"""
 
     def integrate_tsdf(self, render_data_list, width, height, near, far,
                                      fov, sdf_trunc=0.04):
